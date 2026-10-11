@@ -26,6 +26,8 @@ A kimenetet a valódi `kubeseal --recovery-unseal` is sikeresen visszafejti.
 
 ## Fejlesztés
 
+Részletes helyi tesztelési útmutató, minikube-bal együtt: [docs/helyi-teszteles.md](docs/helyi-teszteles.md).
+
 ```sh
 npm install
 npm run dev     # fejlesztői szerver
