@@ -42,5 +42,5 @@ npm run vendor:yaml  # a src/vendor/yaml.js újragenerálása a yaml csomagból
 A `dist/` tartalma bármilyen statikus tárhelyre kitehető. Nincs futásidejű függőség, ezért a
 nyers forrás (`index.html` + `src/`) is működik böngészőben, akár alútvonalon is.
 
-GitHub Pages: a `main` ágra kerülő változásokat a `Deploy` workflow publikálja, ha a repo
-beállításaiban a Pages forrása „GitHub Actions”. „Deploy from a branch” módban is működik.
+GitHub Pages: a `main` ágra kerülő változásokat a `CI` workflow `deploy` jobja publikálja, de csak
+akkor, ha a tesztek zöldek. Ehhez a repo beállításaiban a Pages forrása „GitHub Actions” legyen.
