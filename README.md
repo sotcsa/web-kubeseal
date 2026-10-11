@@ -6,6 +6,8 @@ Böngészőben futó `kubeseal`: gépelés közben azonnal mutatja az eredmény 
 - Tetszőleges számú kulcs-érték pár dinamikusan hozzáadható / törölhető (`Opaque` secret).
 - **Image pull secret** (`kubernetes.io/dockerconfigjson`) registry, felhasználónév, jelszó és opcionális e-mail alapján.
 - Scope: `strict` (alapértelmezett), `namespace-wide`, `cluster-wide`.
+- **Meglévő SealedSecret módosítása:** a beillesztett YAML-ban egyes kulcsok értéke cserélhető, kulcs törölhető
+  vagy hozzáadható; a többi titkosított érték változatlanul megmarad (mint a `kubeseal --merge-into`).
 
 Minden a böngészőben történik (WebCrypto), nincs backend: a tanúsítvány és a titkok nem hagyják el a gépet.
 
@@ -34,6 +36,7 @@ npm run dev     # fejlesztői szerver
 npm test        # unit tesztek (titkosítási formátum)
 npm run test:e2e  # böngészős tesztek (Playwright, asztali + mobil nézet)
 npm run build   # statikus build a dist/ mappába
+npm run vendor:yaml  # a src/vendor/yaml.js újragenerálása a yaml csomagból
 ```
 
 A `dist/` tartalma bármilyen statikus tárhelyre kitehető. Nincs futásidejű függőség, ezért a
