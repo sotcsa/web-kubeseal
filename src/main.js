@@ -1,5 +1,6 @@
 import {
   importPublicKey,
+  certificateInfo,
   encryptValue,
   scopeLabel,
   dockerConfigJson,
@@ -11,11 +12,12 @@ const $ = (id) => document.getElementById(id);
 const els = {
   namespace: $('namespace'),
   name: $('name'),
+  scope: $('scope'),
   cert: $('cert'),
   certFile: $('certFile'),
   certStatus: $('certStatus'),
+  dropzone: $('dropzone'),
   type: $('type'),
-  scope: $('scope'),
   opaqueFields: $('opaqueFields'),
   dockerFields: $('dockerFields'),
   pairs: $('pairs'),
@@ -24,15 +26,23 @@ const els = {
   dockerUsername: $('dockerUsername'),
   dockerPassword: $('dockerPassword'),
   dockerEmail: $('dockerEmail'),
+  revealPassword: $('revealPassword'),
   output: $('output'),
+  empty: $('empty'),
+  checklist: $('checklist'),
   errors: $('errors'),
+  meta: $('meta'),
+  liveDot: $('liveDot'),
   copy: $('copy'),
   download: $('download'),
+  toast: $('toast'),
 };
 
+const DOCKER_TYPE = 'kubernetes.io/dockerconfigjson';
 const DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 const DNS_SUBDOMAIN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
 const SECRET_KEY = /^[-._a-zA-Z0-9]+$/;
+const CERT_HINT = 'Lekérése: <code>kubeseal --fetch-cert &gt; cert.pem</code>';
 
 // Keep ciphertexts stable while only unrelated fields change: cache per (label, value).
 let keyCache = { pem: null, key: null };
@@ -48,34 +58,67 @@ async function getKey(pem) {
   return keyCache.key;
 }
 
-async function encryptCached(key, value, scope, namespace, name) {
+function encryptCached(key, value, scope, namespace, name) {
   const id = `${scopeLabel(scope, namespace, name)}\u0000${value}`;
   if (!cipherCache.has(id)) cipherCache.set(id, encryptValue(key, value, { scope, namespace, name }));
   return cipherCache.get(id);
 }
 
+// ---------- segmented controls ----------
+
+function segmentedValue(group) {
+  return group.querySelector('[aria-checked="true"]').dataset.value;
+}
+
+function setupSegmented(group, onChange) {
+  group.addEventListener('click', (e) => {
+    const button = e.target.closest('button[data-value]');
+    if (!button || button.getAttribute('aria-checked') === 'true') return;
+    for (const b of group.querySelectorAll('button')) b.setAttribute('aria-checked', String(b === button));
+    onChange?.(button.dataset.value);
+    schedule();
+  });
+}
+
+// ---------- key/value pairs ----------
+
+function autosize(textarea) {
+  textarea.style.height = 'auto';
+  textarea.style.height = `${textarea.scrollHeight + 2}px`;
+}
+
 function addPair(key = '', value = '') {
   const node = $('pairTemplate').content.firstElementChild.cloneNode(true);
-  node.querySelector('.pair-key').value = key;
-  node.querySelector('.pair-value').value = value;
+  const keyInput = node.querySelector('.pair-key');
+  const valueInput = node.querySelector('.pair-value');
+  keyInput.value = key;
+  valueInput.value = value;
+  valueInput.addEventListener('input', () => autosize(valueInput));
+  keyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      valueInput.focus();
+    }
+  });
   node.querySelector('.remove').addEventListener('click', () => {
     node.remove();
+    if (!els.pairs.children.length) addPair();
     schedule();
   });
   els.pairs.append(node);
+  autosize(valueInput);
   return node;
 }
 
 function collectData(errors) {
-  if (els.type.value === 'kubernetes.io/dockerconfigjson') {
+  if (segmentedValue(els.type) === DOCKER_TYPE) {
     const server = els.dockerServer.value.trim();
     const username = els.dockerUsername.value;
     const password = els.dockerPassword.value;
-    if (!server || !username || !password) {
-      errors.push('Add meg a registry szervert, a felhasználónevet és a jelszót.');
-      return null;
-    }
-    return { '.dockerconfigjson': dockerConfigJson({ server, username, password, email: els.dockerEmail.value.trim() }) };
+    if (!server || !username || !password) return {};
+    return {
+      '.dockerconfigjson': dockerConfigJson({ server, username, password, email: els.dockerEmail.value.trim() }),
+    };
   }
 
   const data = {};
@@ -87,12 +130,12 @@ function collectData(errors) {
     if (!key && !value) continue;
     if (!SECRET_KEY.test(key)) {
       keyInput.classList.add('invalid');
-      errors.push(`Érvénytelen kulcs: "${key}" (megengedett: betűk, számok, "-", "_", ".").`);
+      errors.push(key ? `Érvénytelen kulcs: „${key}” (betűk, számok, - _ . engedélyezett)` : 'Egy értékhez hiányzik a kulcs');
       continue;
     }
     if (key in data) {
       keyInput.classList.add('invalid');
-      errors.push(`Ismétlődő kulcs: "${key}".`);
+      errors.push(`Ismétlődő kulcs: „${key}”`);
       continue;
     }
     data[key] = value;
@@ -100,12 +143,96 @@ function collectData(errors) {
   return data;
 }
 
-function setOutput(text, ok) {
-  currentYaml = ok ? text : '';
-  els.output.firstElementChild.textContent = text;
-  els.output.classList.toggle('placeholder', !ok);
-  els.copy.disabled = !ok;
-  els.download.disabled = !ok;
+// ---------- rendering ----------
+
+const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+function highlightYaml(yaml) {
+  return yaml
+    .split('\n')
+    .map((line) => {
+      const m = /^(\s*)([^:\s][^:]*):( ?)(.*)$/.exec(line);
+      if (!m) return escapeHtml(line);
+      const [, indent, key, space, value] = m;
+      const cls = value.length > 80 ? 'cipher' : 's';
+      return `${indent}<span class="k">${escapeHtml(key)}</span><span class="p">:</span>${space}${
+        value ? `<span class="${cls}">${escapeHtml(value)}</span>` : ''
+      }`;
+    })
+    .join('\n');
+}
+
+function setChecklist(state) {
+  for (const li of els.checklist.children) li.classList.toggle('done', Boolean(state[li.dataset.check]));
+}
+
+function showOutput(yaml, count) {
+  const changed = yaml !== currentYaml;
+  currentYaml = yaml;
+  els.output.firstElementChild.innerHTML = highlightYaml(yaml);
+  els.output.hidden = false;
+  els.empty.hidden = true;
+  els.copy.disabled = false;
+  els.download.disabled = false;
+  els.liveDot.className = 'live on';
+  els.meta.textContent = `· ${count} titkosított kulcs`;
+  if (changed) {
+    els.output.classList.remove('flash');
+    void els.output.offsetWidth; // restart animation
+    els.output.classList.add('flash');
+  }
+}
+
+function showEmpty() {
+  currentYaml = '';
+  els.output.hidden = true;
+  els.empty.hidden = false;
+  els.copy.disabled = true;
+  els.download.disabled = true;
+  els.liveDot.className = 'live idle';
+  els.meta.textContent = '';
+}
+
+function formatDate(d) {
+  return d.toLocaleDateString('hu-HU', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function setCertStatus(kind, html) {
+  els.certStatus.className = `cert-status ${kind}`;
+  els.certStatus.innerHTML = html;
+}
+
+async function loadCert(pem) {
+  if (!pem) {
+    setCertStatus('muted', CERT_HINT);
+    els.cert.classList.remove('invalid');
+    return null;
+  }
+  try {
+    const key = await getKey(pem);
+    let detail = `RSA ${key.algorithm.modulusLength} bit`;
+    const info = certificateInfo(pem);
+    if (info) {
+      const expired = info.notAfter < new Date();
+      if (info.subject) detail = `${escapeHtml(info.subject)} · ${detail}`;
+      detail += expired
+        ? ` · <strong>lejárt: ${formatDate(info.notAfter)}</strong>`
+        : ` · érvényes eddig: ${formatDate(info.notAfter)}`;
+      if (expired) {
+        setCertStatus('error', `⚠ Tanúsítvány betöltve <span class="detail">${detail}</span>`);
+        els.cert.classList.remove('invalid');
+        return key;
+      }
+    }
+    setCertStatus('ok', `✓ Tanúsítvány betöltve <span class="detail">${detail}</span>`);
+    els.cert.classList.remove('invalid');
+    return key;
+  } catch (e) {
+    keyCache = { pem: null, key: null };
+    setCertStatus('error', `✕ ${escapeHtml(e.message)}`);
+    els.cert.classList.add('invalid');
+    return null;
+  }
 }
 
 async function render() {
@@ -113,62 +240,88 @@ async function render() {
   const errors = [];
   const namespace = els.namespace.value.trim();
   const name = els.name.value.trim();
-  const pem = els.cert.value.trim();
-  const scope = els.scope.value;
-  const type = els.type.value;
+  const scope = segmentedValue(els.scope);
+  const type = segmentedValue(els.type);
 
-  if (namespace && !DNS_LABEL.test(namespace)) errors.push('A namespace érvénytelen (kisbetűk, számok és "-").');
-  if (name && !DNS_SUBDOMAIN.test(name)) errors.push('A name érvénytelen (kisbetűk, számok, "-" és ".").');
+  const nsOk = DNS_LABEL.test(namespace) && namespace.length <= 63;
+  const nameOk = DNS_SUBDOMAIN.test(name) && name.length <= 253;
+  els.namespace.classList.toggle('invalid', Boolean(namespace) && !nsOk);
+  els.name.classList.toggle('invalid', Boolean(name) && !nameOk);
+  if (namespace && !nsOk) errors.push('A namespace csak kisbetűt, számot és kötőjelet tartalmazhat');
+  if (name && !nameOk) errors.push('A name csak kisbetűt, számot, kötőjelet és pontot tartalmazhat');
 
-  let key = null;
-  els.certStatus.textContent = '';
-  els.certStatus.className = 'status';
-  if (pem) {
-    try {
-      key = await getKey(pem);
-      els.certStatus.textContent = '✓ Tanúsítvány betöltve';
-      els.certStatus.classList.add('ok');
-    } catch (e) {
-      keyCache = { pem: null, key: null };
-      els.certStatus.textContent = e.message;
-      els.certStatus.classList.add('error');
-    }
-  }
+  const key = await loadCert(els.cert.value.trim());
+  if (gen !== generation) return;
 
   const data = collectData(errors);
-  if (gen !== generation) return;
-  els.errors.textContent = errors.join('\n');
+  const count = Object.keys(data).length;
+  els.errors.innerHTML = errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('');
+  setChecklist({ namespace: nsOk, name: nameOk, cert: key, data: count > 0 });
 
-  if (!namespace || !name || !key || errors.length || !data) {
-    setOutput('Add meg a namespace-t, a nevet és a tanúsítványt.', false);
+  if (!nsOk || !nameOk || !key || errors.length || !count) {
+    showEmpty();
     return;
   }
 
+  els.liveDot.className = 'live busy';
   try {
     const entries = await Promise.all(
       Object.entries(data).map(async ([k, v]) => [k, await encryptCached(key, v, scope, namespace, name)]),
     );
     if (gen !== generation) return;
     const manifest = buildSealedSecret({ name, namespace, type, scope, encryptedData: Object.fromEntries(entries) });
-    setOutput(`${toYaml(manifest)}\n`, true);
+    showOutput(`${toYaml(manifest)}\n`, count);
   } catch (e) {
     if (gen !== generation) return;
-    els.errors.textContent = `Titkosítási hiba: ${e.message}`;
-    setOutput('', false);
+    els.errors.innerHTML = `<li>Titkosítási hiba: ${escapeHtml(e.message)}</li>`;
+    showEmpty();
   }
 }
 
 let timer;
 function schedule() {
   clearTimeout(timer);
-  timer = setTimeout(render, 150);
+  timer = setTimeout(render, 120);
 }
 
-document.querySelector('main').addEventListener('input', schedule);
-document.querySelector('main').addEventListener('change', schedule);
+// ---------- misc UI ----------
 
-els.type.addEventListener('change', () => {
-  const docker = els.type.value === 'kubernetes.io/dockerconfigjson';
+let toastTimer;
+function toast(message) {
+  els.toast.textContent = message;
+  els.toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => els.toast.classList.remove('show'), 1800);
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Fallback for browsers/contexts without the async clipboard API.
+    const ta = Object.assign(document.createElement('textarea'), { value: text });
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.append(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+}
+
+async function readCertFile(file) {
+  if (!file) return;
+  els.cert.value = (await file.text()).trim();
+  schedule();
+}
+
+// ---------- wiring ----------
+
+document.querySelector('main').addEventListener('input', schedule);
+
+setupSegmented(els.scope);
+setupSegmented(els.type, (value) => {
+  const docker = value === DOCKER_TYPE;
   els.dockerFields.hidden = !docker;
   els.opaqueFields.hidden = docker;
 });
@@ -177,18 +330,34 @@ els.addPair.addEventListener('click', () => {
   addPair().querySelector('.pair-key').focus();
 });
 
+els.revealPassword.addEventListener('click', () => {
+  const show = els.dockerPassword.type === 'password';
+  els.dockerPassword.type = show ? 'text' : 'password';
+  els.revealPassword.classList.toggle('on', show);
+});
+
 els.certFile.addEventListener('change', async () => {
-  const file = els.certFile.files[0];
-  if (!file) return;
-  els.cert.value = await file.text();
+  await readCertFile(els.certFile.files[0]);
   els.certFile.value = '';
-  schedule();
+});
+
+for (const evt of ['dragenter', 'dragover']) {
+  els.dropzone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    els.dropzone.classList.add('dragging');
+  });
+}
+for (const evt of ['dragleave', 'drop']) {
+  els.dropzone.addEventListener(evt, () => els.dropzone.classList.remove('dragging'));
+}
+els.dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  readCertFile(e.dataTransfer.files[0]);
 });
 
 els.copy.addEventListener('click', async () => {
-  await navigator.clipboard.writeText(currentYaml);
-  els.copy.textContent = 'Másolva ✓';
-  setTimeout(() => (els.copy.textContent = 'Másolás'), 1500);
+  await copyText(currentYaml);
+  toast('YAML a vágólapra másolva');
 });
 
 els.download.addEventListener('click', () => {
@@ -197,8 +366,10 @@ els.download.addEventListener('click', () => {
     href: url,
     download: `${els.name.value.trim() || 'sealedsecret'}.sealedsecret.yaml`,
   });
+  document.body.append(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 
 addPair();
