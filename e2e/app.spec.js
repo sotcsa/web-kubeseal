@@ -105,18 +105,15 @@ test('image pull secret', async ({ page }) => {
   await expect(page.locator('#dockerPassword')).toHaveAttribute('type', 'text');
 });
 
-test('scopes change label and annotations', async ({ page }) => {
+test('always strict scope: no selector, no scope annotations', async ({ page }) => {
+  await expect(page.locator('#scope')).toHaveCount(0);
   await fillTarget(page);
   await page.locator('.pair-key').fill('k');
   await page.locator('.pair-value').fill('v');
-
-  await page.getByRole('radio', { name: 'cluster-wide' }).click();
-  await expect(output(page)).toContainText('sealedsecrets.bitnami.com/cluster-wide: "true"');
-  expect(unseal(encryptedData(await output(page).innerText()).k, '')).toBe('v');
-
-  await page.getByRole('radio', { name: 'namespace-wide' }).click();
-  await expect(output(page)).toContainText('sealedsecrets.bitnami.com/namespace-wide: "true"');
-  expect(unseal(encryptedData(await output(page).innerText()).k, 'prod')).toBe('v');
+  await expect(page.locator('#meta')).toContainText('1 titkosított');
+  const yaml = await output(page).innerText();
+  expect(yaml).not.toContain('sealedsecrets.bitnami.com/');
+  expect(unseal(encryptedData(yaml).k, 'prod/app')).toBe('v');
 });
 
 test('validation and checklist', async ({ page }) => {
