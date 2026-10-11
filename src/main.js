@@ -2,6 +2,7 @@ import {
   importPublicKey,
   certificateInfo,
   encryptValue,
+  SCOPES,
   scopeLabel,
   dockerConfigJson,
   buildSealedSecret,
@@ -21,7 +22,6 @@ const els = {
   lockNote: $('lockNote'),
   namespace: $('namespace'),
   name: $('name'),
-  scope: $('scope'),
   cert: $('cert'),
   certFile: $('certFile'),
   certStatus: $('certStatus'),
@@ -381,7 +381,7 @@ async function renderNew() {
   const errors = [];
   const namespace = els.namespace.value.trim();
   const name = els.name.value.trim();
-  const scope = segmentedValue(els.scope);
+  const scope = SCOPES.strict;
   const type = segmentedValue(els.type);
 
   const nsOk = DNS_LABEL.test(namespace) && namespace.length <= 63;
@@ -491,7 +491,6 @@ function lockTarget(locked) {
   els.namespace.readOnly = locked;
   els.name.readOnly = locked;
   els.lockNote.hidden = !locked;
-  setDisabled(els.scope, locked);
   setDisabled(els.type, locked);
 }
 
@@ -508,7 +507,11 @@ function loadExisting(text) {
   }
   try {
     existing = parseSealedSecret(text);
+    if (existing.scope !== SCOPES.strict) {
+      throw new Error(`Csak strict scope-ú SealedSecret módosítható, ez ${existing.scope}.`);
+    }
   } catch (e) {
+    existing = null;
     setStatus(els.existingStatus, 'error', `✕ ${escapeHtml(e.message)}`);
     els.existing.classList.add('invalid');
     lockTarget(false);
@@ -517,7 +520,6 @@ function loadExisting(text) {
   const keys = Object.keys(existing.encryptedData);
   els.namespace.value = existing.namespace;
   els.name.value = existing.name;
-  setSegmented(els.scope, existing.scope);
   const docker = existing.type === DOCKER_TYPE;
   setSegmented(els.type, docker ? DOCKER_TYPE : 'Opaque');
   applyType(docker ? DOCKER_TYPE : 'Opaque');
@@ -660,7 +662,6 @@ document.querySelector('main').addEventListener('input', (e) => {
 });
 
 setupSegmented(els.mode, setMode);
-setupSegmented(els.scope);
 setupSegmented(els.type, applyType);
 
 els.addPair.addEventListener('click', () => {

@@ -67,16 +67,8 @@
           </div>
           <p id="lockNote" class="lock-note" hidden>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-            A betöltött SealedSecretből. A meglévő értékek ehhez a névtérhez, névhez és scope-hoz vannak kötve, ezért nem módosíthatók.
+            A betöltött SealedSecretből. A meglévő értékek ehhez a névtérhez és névhez vannak kötve (strict scope), ezért nem módosíthatók.
           </p>
-          <div class="field">
-            <span class="label">Scope</span>
-            <div class="segmented" id="scope" role="radiogroup" aria-label="Scope">
-              <button type="button" role="radio" data-value="strict" aria-checked="true">strict</button>
-              <button type="button" role="radio" data-value="namespace-wide" aria-checked="false">namespace-wide</button>
-              <button type="button" role="radio" data-value="cluster-wide" aria-checked="false">cluster-wide</button>
-            </div>
-          </div>
         </div>
 
         <div class="card">

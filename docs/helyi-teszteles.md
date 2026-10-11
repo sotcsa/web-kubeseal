@@ -69,7 +69,7 @@ helm install sealed-secrets sealed-secrets/sealed-secrets \
 **B) Egyetlen manifest kubectl-lel**
 
 A legfrissebb verziót a [releases oldalon](https://github.com/bitnami/sealed-secrets/releases) találod.
-A web kubeseal kimenetét a 0.40.0-s controller (Helm chart 2.20.0) mindhárom scope-pal sikeresen visszafejti.
+A web kubeseal kimenetét a 0.40.0-s controller (Helm chart 2.20.0) sikeresen visszafejti.
 
 ```sh
 VERSION=0.40.0
@@ -111,7 +111,7 @@ head -1 cert.pem   # -----BEGIN CERTIFICATE-----
 ### 2.4 SealedSecret generálása és alkalmazása
 
 1. Nyisd meg a web kubesealt: https://sotcsa.github.io/web-kubeseal/ vagy a helyi `npm run dev` példányt.
-2. Namespace: `demo`, Name: `app-secret`, Scope: `strict`.
+2. Namespace: `demo`, Name: `app-secret`.
 3. Illeszd be vagy húzd be a `cert.pem` tartalmát. A tanúsítvány alatt zöld pipának kell megjelennie.
 4. Kulcs-érték párok, például `DB_PASSWORD` = `hunter2` és `API_TOKEN` = `abc123`.
 5. Kattints a letöltés ikonra. A fájl neve `app-secret.sealedsecret.yaml` lesz.
@@ -184,16 +184,11 @@ Ha a névtér minden podja ezt használja, add hozzá a default service accounth
 kubectl -n demo patch serviceaccount default -p '{"imagePullSecrets":[{"name":"regcred"}]}'
 ```
 
-### 2.6 Scope-ok tesztelése és hibakeresés
+### 2.6 A strict scope ellenőrzése és hibakeresés
 
-A scope határozza meg, milyen névtérben és néven fejthető vissza az adat. Ellenőrzés: írd át a YAML-ban a
-`metadata.name`-et és a `template.metadata.name`-et (más névtérhez a `namespace` mezőket), majd alkalmazd újra.
-
-| Scope | Ugyanaz a YAML más névvel | Más névtérben |
-| --- | --- | --- |
-| strict | hiba: no key could decrypt secret | hiba |
-| namespace-wide | működik | hiba |
-| cluster-wide | működik | működik |
+Az app mindig strict scope-pal titkosít, ezért az adat csak a megadott névtérben és néven fejthető vissza.
+Ellenőrzés: írd át a YAML-ban a `metadata.name`-et és a `template.metadata.name`-et (más névtérhez a `namespace`
+mezőket), majd alkalmazd újra. Mindkét esetben `no key could decrypt secret` hibát kell kapnod.
 
 Hasznos parancsok:
 
@@ -206,7 +201,7 @@ kubectl -n demo get events --sort-by=.lastTimestamp | tail
 | --- | --- | --- |
 | `no matches for kind "SealedSecret"` | nincs telepítve a controller vagy a CRD | 2.2 |
 | `namespaces "demo" not found` | a cél névtér nem létezik | `kubectl create namespace demo` |
-| `no key could decrypt secret` | más cluster tanúsítványával titkosítottál, vagy a név/névtér nem egyezik a scope-pal | kérd le újra a tanúsítványt (2.3), és generáld újra a YAML-t |
+| `no key could decrypt secret` | más cluster tanúsítványával titkosítottál, vagy a név/névtér nem egyezik azzal, amire titkosítottál | kérd le újra a tanúsítványt (2.3), és generáld újra a YAML-t |
 | `Resource "app-secret" already exists and is not managed by SealedSecret` | már van ilyen nevű, kézzel létrehozott Secret | `kubectl -n demo delete secret app-secret`, majd apply újra |
 | a pod `ImagePullBackOff` állapotú | rossz registry, felhasználónév vagy token, vagy hiányzik az `imagePullSecrets` | 2.5 |
 

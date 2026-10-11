@@ -28,11 +28,10 @@ const output = (page) => page.locator('#output');
 const row = (page, key) => page.locator(`.pair.existing[data-key="${key}"]`);
 
 // Creates a SealedSecret in "new" mode and returns its YAML.
-async function createSecret(page, { ns = 'prod', name = 'app', scope = 'strict', pairs }) {
+async function createSecret(page, { ns = 'prod', name = 'app', pairs }) {
   await page.fill('#namespace', ns);
   await page.fill('#name', name);
   await page.fill('#cert', certPem);
-  if (scope !== 'strict') await page.locator('#scope').getByRole('radio', { name: scope }).click();
   for (const [i, [k, v]] of pairs.entries()) {
     if (i) await page.click('#addPair');
     await page.locator('.pair-key').nth(i).fill(k);
@@ -73,7 +72,6 @@ test('replace one key, delete one, add one; the rest stays byte-identical', asyn
   await expect(page.locator('#namespace')).toHaveValue('prod');
   await expect(page.locator('#namespace')).toHaveJSProperty('readOnly', true);
   await expect(page.locator('#lockNote')).toBeVisible();
-  await expect(page.locator('#scope button').first()).toBeDisabled();
   await expect(page.locator('.pair.existing')).toHaveCount(3);
   // Nothing changed yet: output equals the input.
   await expect(page.locator('#changes')).toContainText('Még nincs változás');
@@ -107,16 +105,19 @@ test('replace one key, delete one, add one; the rest stays byte-identical', asyn
   expect(encryptedData(await output(page).innerText())).toEqual(before);
 });
 
-test('keeps the loaded scope and encrypts with its label', async ({ page }) => {
-  const original = await createSecret(page, { ns: 'team', name: 'shared', scope: 'cluster-wide', pairs: [['K', 'v1']] });
-  await openEdit(page, original);
-  await expect(page.locator('#scope').getByRole('radio', { name: 'cluster-wide' })).toHaveAttribute('aria-checked', 'true');
-  await row(page, 'K').getByRole('button', { name: 'Új érték' }).click();
-  await page.keyboard.type('v2');
-  await expect(page.locator('#changes')).toContainText('~ K');
-  const yaml = await output(page).innerText();
-  expect(yaml).toContain('sealedsecrets.bitnami.com/cluster-wide: "true"');
-  expect(unseal(encryptedData(yaml).K, '')).toBe('v2');
+test('rejects a SealedSecret that is not strict scope', async ({ page }) => {
+  const strict = await createSecret(page, { pairs: [['K', 'v1']] });
+  const clusterWide = strict.replace(
+    'metadata:\n  name: app',
+    'metadata:\n  annotations:\n    sealedsecrets.bitnami.com/cluster-wide: "true"\n  name: app',
+  );
+  expect(clusterWide).not.toBe(strict);
+  await page.getByRole('radio', { name: 'Meglévő módosítása' }).click();
+  await page.fill('#existing', clusterWide);
+  await expect(page.locator('#existingStatus')).toContainText('Csak strict scope-ú');
+  await expect(page.locator('#existing')).toHaveClass(/invalid/);
+  await expect(page.locator('.pair.existing')).toHaveCount(0);
+  await expect(page.locator('#namespace')).toHaveJSProperty('readOnly', false);
 });
 
 test('reads kubectl output and drops server-side fields', async ({ page }) => {

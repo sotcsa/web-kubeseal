@@ -8,7 +8,8 @@ Böngészőben futó `kubeseal`: gépelés közben azonnal mutatja az eredmény 
   történik, ezért a szervernek engednie kell (CORS), ahogy pl. a `raw.githubusercontent.com` vagy egy publikus bucket teszi.
 - Tetszőleges számú kulcs-érték pár dinamikusan hozzáadható / törölhető (`Opaque` secret).
 - **Image pull secret** (`kubernetes.io/dockerconfigjson`) registry, felhasználónév, jelszó és opcionális e-mail alapján.
-- Scope: `strict` (alapértelmezett), `namespace-wide`, `cluster-wide`.
+- Scope: mindig `strict`, a titok csak a megadott névtérben és néven fejthető vissza. Más scope-ú SealedSecret
+  nem módosítható.
 - **Meglévő SealedSecret módosítása:** a beillesztett YAML-ban egyes kulcsok értéke cserélhető, kulcs törölhető
   vagy hozzáadható; a többi titkosított érték változatlanul megmarad (mint a `kubeseal --merge-into`).
 
@@ -23,8 +24,8 @@ kubeseal --fetch-cert > cert.pem
 ## Titkosítás
 
 Ugyanaz a formátum, mint a `kubeseal` (`HybridEncrypt`): véletlen 32 bájtos AES-256-GCM kulcs (nulla nonce),
-amit RSA-OAEP (SHA-256) titkosít a controller kulcsával, a scope-nak megfelelő címkével
-(`namespace/name`, `namespace` vagy üres). Kimenet: `uint16 hossz || RSA titkosított kulcs || AES-GCM titkosított adat`, base64-ben.
+amit RSA-OAEP (SHA-256) titkosít a controller kulcsával, `namespace/name` címkével
+(strict scope). Kimenet: `uint16 hossz || RSA titkosított kulcs || AES-GCM titkosított adat`, base64-ben.
 
 A tesztek a `test/fixtures` alatti **csak tesztre szánt** kulcspárral ellenőrzik, hogy az eredmény visszafejthető.
 A kimenetet a valódi `kubeseal --recovery-unseal` is sikeresen visszafejti.
