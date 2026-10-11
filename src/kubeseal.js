@@ -56,19 +56,66 @@ function readTlv(bytes, offset) {
   return { tag, start: pos, end: pos + len, next: pos + len, headerStart: offset };
 }
 
-/** Extracts the SubjectPublicKeyInfo DER bytes from an X.509 certificate DER. */
-export function spkiFromCertificate(der) {
+// Walks tbsCertificate and returns the TLVs of the fields we need.
+function certificateFields(der) {
   const cert = readTlv(der, 0);
   if (cert.tag !== 0x30) throw new Error('A tanúsítvány nem DER SEQUENCE.');
   const tbs = readTlv(der, cert.start);
   if (tbs.tag !== 0x30) throw new Error('Hiányzó tbsCertificate.');
-  let pos = tbs.start;
-  let el = readTlv(der, pos);
+  let el = readTlv(der, tbs.start);
   if (el.tag === 0xa0) el = readTlv(der, el.next); // optional [0] version
   // serialNumber, signature, issuer, validity, subject, subjectPublicKeyInfo
-  for (let i = 0; i < 5; i++) el = readTlv(der, el.next);
-  if (el.tag !== 0x30) throw new Error('Hiányzó SubjectPublicKeyInfo.');
-  return der.slice(el.headerStart, el.end);
+  const fields = {};
+  for (const field of ['signature', 'issuer', 'validity', 'subject', 'spki']) {
+    el = readTlv(der, el.next);
+    fields[field] = el;
+  }
+  if (fields.spki.tag !== 0x30) throw new Error('Hiányzó SubjectPublicKeyInfo.');
+  return fields;
+}
+
+/** Extracts the SubjectPublicKeyInfo DER bytes from an X.509 certificate DER. */
+export function spkiFromCertificate(der) {
+  const { spki } = certificateFields(der);
+  return der.slice(spki.headerStart, spki.end);
+}
+
+function parseTime(der, tlv) {
+  const s = new TextDecoder().decode(der.subarray(tlv.start, tlv.end));
+  // UTCTime (0x17): YYMMDDHHMMSSZ, GeneralizedTime (0x18): YYYYMMDDHHMMSSZ
+  const full = tlv.tag === 0x17 ? `${Number(s.slice(0, 2)) >= 50 ? '19' : '20'}${s}` : s;
+  const [y, mo, d, h, mi, se] = [0, 4, 6, 8, 10, 12].map((i, n) => full.slice(i, n ? i + 2 : 4));
+  return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +se));
+}
+
+const NAME_OIDS = { '550403': 'CN', '55040a': 'O', '55040b': 'OU' };
+
+function parseName(der, tlv) {
+  const parts = [];
+  for (let pos = tlv.start; pos < tlv.end; ) {
+    const set = readTlv(der, pos);
+    const atv = readTlv(der, set.start);
+    const oid = readTlv(der, atv.start);
+    const value = readTlv(der, oid.next);
+    const hex = Array.from(der.subarray(oid.start, oid.end), (b) => b.toString(16).padStart(2, '0')).join('');
+    if (NAME_OIDS[hex]) parts.push(`${NAME_OIDS[hex]}=${new TextDecoder().decode(der.subarray(value.start, value.end))}`);
+    pos = set.next;
+  }
+  return parts.join(', ');
+}
+
+/** Human-readable details of a PEM certificate: subject and validity window. */
+export function certificateInfo(pem) {
+  const { type, der } = pemToDer(pem);
+  if (type !== 'CERTIFICATE') return null;
+  const { validity, subject } = certificateFields(der);
+  const notBefore = readTlv(der, validity.start);
+  const notAfter = readTlv(der, notBefore.next);
+  return {
+    subject: subject.end > subject.start ? parseName(der, subject) : '',
+    notBefore: parseTime(der, notBefore),
+    notAfter: parseTime(der, notAfter),
+  };
 }
 
 /** Imports a sealed-secrets controller certificate (or a PUBLIC KEY PEM) for RSA-OAEP. */

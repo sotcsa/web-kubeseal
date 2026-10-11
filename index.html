@@ -3,100 +3,169 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
     <title>Web kubeseal</title>
-    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%238b5cf6%22 stroke-width=%222.2%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Crect x=%224%22 y=%2211%22 width=%2216%22 height=%2210%22 rx=%222.5%22/%3E%3Cpath d=%22M8 11V7a4 4 0 0 1 8 0v4%22/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
-    <header>
-      <h1>Web kubeseal</h1>
-      <p class="sub">
-        SealedSecret generálás a böngészőben. A tanúsítvány és a titkok nem hagyják el a gépedet.
-      </p>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        </span>
+        <div>
+          <h1>Web kubeseal</h1>
+          <p>SealedSecret generátor, valós időben</p>
+        </div>
+      </div>
+      <span class="badge" title="A titkosítás a böngésződben történik (WebCrypto). Semmi nem kerül elküldésre.">
+        <span class="dot"></span>Csak a böngésződben fut
+      </span>
     </header>
 
-    <main>
-      <section class="panel form">
-        <div class="row">
-          <label>Namespace <span class="req">*</span>
-            <input id="namespace" type="text" placeholder="default" autocomplete="off" spellcheck="false" />
-          </label>
-          <label>Name <span class="req">*</span>
-            <input id="name" type="text" placeholder="my-secret" autocomplete="off" spellcheck="false" />
-          </label>
+    <main class="layout">
+      <section class="column">
+        <div class="card">
+          <div class="card-head">
+            <span class="step">1</span>
+            <h2>Cél</h2>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="namespace">Namespace</label>
+              <input id="namespace" type="text" placeholder="default" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label for="name">Name</label>
+              <input id="name" type="text" placeholder="my-secret" autocomplete="off" spellcheck="false" />
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">Scope</span>
+            <div class="segmented" id="scope" role="radiogroup" aria-label="Scope">
+              <button type="button" role="radio" data-value="strict" aria-checked="true">strict</button>
+              <button type="button" role="radio" data-value="namespace-wide" aria-checked="false">namespace-wide</button>
+              <button type="button" role="radio" data-value="cluster-wide" aria-checked="false">cluster-wide</button>
+            </div>
+          </div>
         </div>
 
-        <label>Controller tanúsítvány (PEM) <span class="req">*</span>
-          <textarea id="cert" rows="6" spellcheck="false"
-            placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
-        </label>
-        <div class="hint">
-          <span>Lekérése: <code>kubeseal --fetch-cert &gt; cert.pem</code></span>
-          <label class="file-btn">Fájl betöltése<input id="certFile" type="file" accept=".pem,.crt,.cert,text/plain" hidden /></label>
-        </div>
-        <div id="certStatus" class="status"></div>
-
-        <div class="row">
-          <label>Secret típus
-            <select id="type">
-              <option value="Opaque">Opaque (kulcs-érték párok)</option>
-              <option value="kubernetes.io/dockerconfigjson">Image pull secret (dockerconfigjson)</option>
-            </select>
-          </label>
-          <label>Scope
-            <select id="scope">
-              <option value="strict">strict (namespace + name)</option>
-              <option value="namespace-wide">namespace-wide</option>
-              <option value="cluster-wide">cluster-wide</option>
-            </select>
-          </label>
-        </div>
-
-        <div id="opaqueFields">
-          <h2>Kulcs-érték párok</h2>
-          <div id="pairs"></div>
-          <button id="addPair" type="button" class="secondary">+ Új pár</button>
-        </div>
-
-        <div id="dockerFields" hidden>
-          <h2>Registry hitelesítés</h2>
-          <label>Registry szerver <span class="req">*</span>
-            <input id="dockerServer" type="text" placeholder="ghcr.io" autocomplete="off" spellcheck="false" />
-          </label>
-          <div class="row">
-            <label>Felhasználónév <span class="req">*</span>
-              <input id="dockerUsername" type="text" autocomplete="off" spellcheck="false" />
-            </label>
-            <label>Jelszó / token <span class="req">*</span>
-              <input id="dockerPassword" type="password" autocomplete="new-password" />
+        <div class="card">
+          <div class="card-head">
+            <span class="step">2</span>
+            <h2>Controller tanúsítvány</h2>
+          </div>
+          <div class="dropzone" id="dropzone">
+            <textarea id="cert" rows="5" spellcheck="false"
+              placeholder="Illeszd be a PEM tanúsítványt, vagy húzd ide a fájlt…&#10;&#10;-----BEGIN CERTIFICATE-----"></textarea>
+            <div class="drop-overlay">Engedd el a tanúsítvány betöltéséhez</div>
+          </div>
+          <div class="cert-row">
+            <div id="certStatus" class="cert-status muted">
+              Lekérése: <code>kubeseal --fetch-cert &gt; cert.pem</code>
+            </div>
+            <label class="link-btn">
+              Fájl választása
+              <input id="certFile" type="file" accept=".pem,.crt,.cert,text/plain" hidden />
             </label>
           </div>
-          <label>E-mail (opcionális)
-            <input id="dockerEmail" type="email" autocomplete="off" />
-          </label>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <span class="step">3</span>
+            <h2>Tartalom</h2>
+          </div>
+          <div class="segmented wide" id="type" role="radiogroup" aria-label="Secret típus">
+            <button type="button" role="radio" data-value="Opaque" aria-checked="true">Kulcs-érték párok</button>
+            <button type="button" role="radio" data-value="kubernetes.io/dockerconfigjson" aria-checked="false">Image pull secret</button>
+          </div>
+
+          <div id="opaqueFields">
+            <div id="pairs" class="pairs"></div>
+            <button id="addPair" type="button" class="ghost-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              Új pár
+            </button>
+          </div>
+
+          <div id="dockerFields" hidden>
+            <div class="field">
+              <label for="dockerServer">Registry</label>
+              <input id="dockerServer" type="text" placeholder="ghcr.io" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label for="dockerUsername">Felhasználónév</label>
+                <input id="dockerUsername" type="text" autocomplete="off" spellcheck="false" />
+              </div>
+              <div class="field">
+                <label for="dockerPassword">Jelszó / token</label>
+                <div class="secret-input">
+                  <input id="dockerPassword" type="password" autocomplete="new-password" />
+                  <button type="button" id="revealPassword" class="icon-btn reveal" aria-label="Megjelenítés" title="Megjelenítés">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="field">
+              <label for="dockerEmail">E-mail <span class="optional">opcionális</span></label>
+              <input id="dockerEmail" type="email" autocomplete="off" />
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="panel output">
-        <div class="output-head">
-          <h2>SealedSecret</h2>
-          <div class="actions">
-            <button id="copy" type="button" disabled>Másolás</button>
-            <button id="download" type="button" class="secondary" disabled>Letöltés</button>
+      <section class="column output-column">
+        <div class="card output-card">
+          <div class="output-head">
+            <div class="output-title">
+              <span id="liveDot" class="live idle"></span>
+              <h2>SealedSecret</h2>
+              <span id="meta" class="meta"></span>
+            </div>
+            <div class="actions">
+              <button id="copy" type="button" class="primary-btn" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+                <span>Másolás</span>
+              </button>
+              <button id="download" type="button" class="icon-btn bordered" disabled aria-label="Letöltés" title="Letöltés .yaml fájlként">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+              </button>
+            </div>
+          </div>
+          <ul id="errors" class="issues"></ul>
+          <pre id="output" class="code" hidden><code></code></pre>
+          <div id="empty" class="empty">
+            <div class="empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            </div>
+            <p>Az eredmény itt jelenik meg, amint minden adat megvan:</p>
+            <ul id="checklist" class="checklist">
+              <li data-check="namespace">Namespace</li>
+              <li data-check="name">Name</li>
+              <li data-check="cert">Érvényes tanúsítvány</li>
+              <li data-check="data">Legalább egy titok</li>
+            </ul>
           </div>
         </div>
-        <div id="errors" class="status error"></div>
-        <pre id="output"><code>Add meg a namespace-t, a nevet és a tanúsítványt.</code></pre>
       </section>
     </main>
 
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
     <template id="pairTemplate">
       <div class="pair">
-        <input class="pair-key" type="text" placeholder="kulcs" autocomplete="off" spellcheck="false" />
-        <textarea class="pair-value" rows="1" placeholder="érték" spellcheck="false"></textarea>
-        <button type="button" class="remove" title="Törlés" aria-label="Törlés">×</button>
+        <input class="pair-key" type="text" placeholder="KULCS" autocomplete="off" spellcheck="false" aria-label="Kulcs" />
+        <textarea class="pair-value" rows="1" placeholder="érték" spellcheck="false" aria-label="Érték"></textarea>
+        <button type="button" class="icon-btn remove" aria-label="Pár törlése" title="Törlés">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
       </div>
     </template>
 
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>

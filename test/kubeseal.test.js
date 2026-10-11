@@ -108,3 +108,13 @@ spec:
     expect(yaml).toContain('encryptedData: {}');
   });
 });
+
+describe('certificateInfo', () => {
+  it('reads subject and validity', async () => {
+    const { certificateInfo } = await import('../src/kubeseal.js');
+    const info = certificateInfo(certPem);
+    expect(info.subject).toBe('O=sealed-secret');
+    expect(info.notAfter.getTime()).toBeGreaterThan(info.notBefore.getTime());
+    expect(info.notAfter.getUTCFullYear()).toBe(2036);
+  });
+});

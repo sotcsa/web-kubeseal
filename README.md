@@ -29,10 +29,13 @@ A kimenetet a valódi `kubeseal --recovery-unseal` is sikeresen visszafejti.
 ```sh
 npm install
 npm run dev     # fejlesztői szerver
-npm test        # tesztek
+npm test        # unit tesztek (titkosítási formátum)
+npm run test:e2e  # böngészős tesztek (Playwright, asztali + mobil nézet)
 npm run build   # statikus build a dist/ mappába
 ```
 
-A `dist/` tartalma bármilyen statikus tárhelyre kitehető. A `main` ágra kerülő változásokat a
-`Deploy` workflow GitHub Pages-re publikálja (ehhez a repo beállításaiban a Pages forrását
-„GitHub Actions”-re kell állítani).
+A `dist/` tartalma bármilyen statikus tárhelyre kitehető. Nincs futásidejű függőség, ezért a
+nyers forrás (`index.html` + `src/`) is működik böngészőben, akár alútvonalon is.
+
+GitHub Pages: a `main` ágra kerülő változásokat a `Deploy` workflow publikálja, ha a repo
+beállításaiban a Pages forrása „GitHub Actions”. „Deploy from a branch” módban is működik.
