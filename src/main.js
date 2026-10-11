@@ -7,9 +7,17 @@ import {
   buildSealedSecret,
   toYaml,
 } from './kubeseal.js';
+import { parseSealedSecret, updatedYaml } from './existing.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
+  mode: $('mode'),
+  existingCard: $('existingCard'),
+  existing: $('existing'),
+  existingFile: $('existingFile'),
+  existingStatus: $('existingStatus'),
+  existingDropzone: $('existingDropzone'),
+  lockNote: $('lockNote'),
   namespace: $('namespace'),
   name: $('name'),
   scope: $('scope'),
@@ -20,6 +28,7 @@ const els = {
   type: $('type'),
   opaqueFields: $('opaqueFields'),
   dockerFields: $('dockerFields'),
+  dockerEditHint: $('dockerEditHint'),
   pairs: $('pairs'),
   addPair: $('addPair'),
   dockerServer: $('dockerServer'),
@@ -29,8 +38,10 @@ const els = {
   revealPassword: $('revealPassword'),
   output: $('output'),
   empty: $('empty'),
+  emptyText: document.querySelector('#empty p'),
   checklist: $('checklist'),
   errors: $('errors'),
+  changes: $('changes'),
   meta: $('meta'),
   liveDot: $('liveDot'),
   copy: $('copy'),
@@ -39,16 +50,34 @@ const els = {
 };
 
 const DOCKER_TYPE = 'kubernetes.io/dockerconfigjson';
+const DOCKER_KEY = '.dockerconfigjson';
 const DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 const DNS_SUBDOMAIN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
 const SECRET_KEY = /^[-._a-zA-Z0-9]+$/;
 const CERT_HINT = 'Lekérése: <code>kubeseal --fetch-cert &gt; cert.pem</code>';
+const EXISTING_HINT = 'A kulcsok értékei titkosítva maradnak, csak a módosítottak titkosítódnak újra.';
+
+const CHECKLISTS = {
+  new: [
+    ['namespace', 'Namespace'],
+    ['name', 'Name'],
+    ['cert', 'Érvényes tanúsítvány'],
+    ['data', 'Legalább egy titok'],
+  ],
+  edit: [
+    ['existing', 'Meglévő SealedSecret'],
+    ['cert', 'Érvényes tanúsítvány (ugyanabból a clusterből)'],
+  ],
+};
 
 // Keep ciphertexts stable while only unrelated fields change: cache per (label, value).
 let keyCache = { pem: null, key: null };
 let cipherCache = new Map();
 let generation = 0;
 let currentYaml = '';
+let mode = 'new';
+let existing = null; // parsed SealedSecret in edit mode
+let existingText = null;
 
 async function getKey(pem) {
   if (keyCache.pem !== pem) {
@@ -70,14 +99,28 @@ function segmentedValue(group) {
   return group.querySelector('[aria-checked="true"]').dataset.value;
 }
 
+function setSegmented(group, value) {
+  for (const b of group.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.value === value));
+}
+
 function setupSegmented(group, onChange) {
   group.addEventListener('click', (e) => {
     const button = e.target.closest('button[data-value]');
-    if (!button || button.getAttribute('aria-checked') === 'true') return;
-    for (const b of group.querySelectorAll('button')) b.setAttribute('aria-checked', String(b === button));
+    if (!button || button.disabled || button.getAttribute('aria-checked') === 'true') return;
+    setSegmented(group, button.dataset.value);
     onChange?.(button.dataset.value);
     schedule();
   });
+}
+
+function setDisabled(group, disabled) {
+  for (const b of group.querySelectorAll('button')) b.disabled = disabled;
+}
+
+function applyType(value) {
+  const docker = value === DOCKER_TYPE;
+  els.dockerFields.hidden = !docker;
+  els.opaqueFields.hidden = docker;
 }
 
 // ---------- key/value pairs ----------
@@ -102,7 +145,7 @@ function addPair(key = '', value = '') {
   });
   node.querySelector('.remove').addEventListener('click', () => {
     node.remove();
-    if (!els.pairs.children.length) addPair();
+    if (mode === 'new' && !els.pairs.children.length) addPair();
     schedule();
   });
   els.pairs.append(node);
@@ -110,19 +153,59 @@ function addPair(key = '', value = '') {
   return node;
 }
 
+function setRowState(row, state) {
+  row.dataset.state = state;
+  const value = row.querySelector('.pair-value');
+  value.hidden = state !== 'replaced';
+  row.querySelector('.locked').hidden = state === 'replaced';
+  row.querySelector('.locked-text').textContent =
+    state === 'deleted' ? 'törlésre jelölve' : 'titkosítva · változatlan';
+  row.querySelector('.replace').hidden = state !== 'kept';
+  row.querySelector('.cancel').hidden = state !== 'replaced';
+  row.querySelector('.undo').hidden = state !== 'deleted';
+  row.querySelector('.remove').hidden = state === 'deleted';
+  if (state !== 'replaced') value.value = '';
+  schedule();
+}
+
+function addExistingPair(key) {
+  const row = $('existingPairTemplate').content.firstElementChild.cloneNode(true);
+  row.dataset.key = key;
+  row.querySelector('.pair-key').value = key;
+  const value = row.querySelector('.pair-value');
+  value.addEventListener('input', () => autosize(value));
+  row.querySelector('.replace').addEventListener('click', () => {
+    setRowState(row, 'replaced');
+    autosize(value);
+    value.focus();
+  });
+  row.querySelector('.cancel').addEventListener('click', () => setRowState(row, 'kept'));
+  row.querySelector('.remove').addEventListener('click', () => setRowState(row, 'deleted'));
+  row.querySelector('.undo').addEventListener('click', () => setRowState(row, 'kept'));
+  els.pairs.append(row);
+  return row;
+}
+
+function dockerInput() {
+  const server = els.dockerServer.value.trim();
+  const username = els.dockerUsername.value;
+  const password = els.dockerPassword.value;
+  if (!server || !username || !password) return null;
+  return dockerConfigJson({ server, username, password, email: els.dockerEmail.value.trim() });
+}
+
+// New mode: plaintext values to encrypt, keyed by secret key.
 function collectData(errors) {
   if (segmentedValue(els.type) === DOCKER_TYPE) {
-    const server = els.dockerServer.value.trim();
-    const username = els.dockerUsername.value;
-    const password = els.dockerPassword.value;
-    if (!server || !username || !password) return {};
-    return {
-      '.dockerconfigjson': dockerConfigJson({ server, username, password, email: els.dockerEmail.value.trim() }),
-    };
+    const json = dockerInput();
+    return json ? { [DOCKER_KEY]: json } : {};
   }
+  return collectNewPairs(errors, new Set());
+}
 
+function collectNewPairs(errors, taken) {
   const data = {};
-  for (const row of els.pairs.querySelectorAll('.pair')) {
+  for (const row of els.pairs.querySelectorAll('.pair:not(.existing)')) {
     const keyInput = row.querySelector('.pair-key');
     const key = keyInput.value.trim();
     const value = row.querySelector('.pair-value').value;
@@ -133,9 +216,13 @@ function collectData(errors) {
       errors.push(key ? `Érvénytelen kulcs: „${key}” (betűk, számok, - _ . engedélyezett)` : 'Egy értékhez hiányzik a kulcs');
       continue;
     }
-    if (key in data) {
+    if (key in data || taken.has(key)) {
       keyInput.classList.add('invalid');
-      errors.push(`Ismétlődő kulcs: „${key}”`);
+      errors.push(
+        taken.has(key)
+          ? `A(z) „${key}” kulcs már létezik – a meglévő sorában válaszd az „Új érték” gombot`
+          : `Ismétlődő kulcs: „${key}”`,
+      );
       continue;
     }
     data[key] = value;
@@ -143,39 +230,74 @@ function collectData(errors) {
   return data;
 }
 
+// Edit mode: which existing keys stay, change or go, plus new keys.
+function collectEdit(errors) {
+  const kept = [];
+  const replaced = {};
+  const deleted = [];
+  if (existing.type === DOCKER_TYPE) {
+    const json = dockerInput();
+    if (json) replaced[DOCKER_KEY] = json;
+    for (const k of Object.keys(existing.encryptedData)) if (!(k in replaced)) kept.push(k);
+    return { kept, replaced, deleted, added: {} };
+  }
+  for (const row of els.pairs.querySelectorAll('.pair.existing')) {
+    const key = row.querySelector('.pair-key').value;
+    if (row.dataset.state === 'replaced') replaced[key] = row.querySelector('.pair-value').value;
+    else if (row.dataset.state === 'deleted') deleted.push(key);
+    else kept.push(key);
+  }
+  const added = collectNewPairs(errors, new Set(Object.keys(existing.encryptedData)));
+  return { kept, replaced, deleted, added };
+}
+
 // ---------- rendering ----------
 
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-function highlightYaml(yaml) {
+function highlightYaml(yaml, marks = {}) {
+  let inData = false;
   return yaml
     .split('\n')
     .map((line) => {
+      const indent = line.length - line.trimStart().length;
+      if (/^\s*encryptedData:\s*$/.test(line)) inData = true;
+      else if (inData && line.trim() && indent <= 2) inData = false;
       const m = /^(\s*)([^:\s][^:]*):( ?)(.*)$/.exec(line);
       if (!m) return escapeHtml(line);
-      const [, indent, key, space, value] = m;
+      const [, pad, key, space, value] = m;
       const cls = value.length > 80 ? 'cipher' : 's';
-      return `${indent}<span class="k">${escapeHtml(key)}</span><span class="p">:</span>${space}${
+      const html = `${pad}<span class="k">${escapeHtml(key)}</span><span class="p">:</span>${space}${
         value ? `<span class="${cls}">${escapeHtml(value)}</span>` : ''
       }`;
+      const mark = inData && indent > 2 ? marks[key] : null;
+      if (mark) return `<span class="line-${mark}">${html}</span>`;
+      if (Object.keys(marks).length && inData && indent > 2) return `<span class="dim">${html}</span>`;
+      return html;
     })
     .join('\n');
+}
+
+function renderChecklist() {
+  els.checklist.innerHTML = CHECKLISTS[mode]
+    .map(([id, label]) => `<li data-check="${id}">${escapeHtml(label)}</li>`)
+    .join('');
 }
 
 function setChecklist(state) {
   for (const li of els.checklist.children) li.classList.toggle('done', Boolean(state[li.dataset.check]));
 }
 
-function showOutput(yaml, count) {
+function showOutput(yaml, meta, marks) {
   const changed = yaml !== currentYaml;
   currentYaml = yaml;
-  els.output.firstElementChild.innerHTML = highlightYaml(yaml);
+  els.output.firstElementChild.innerHTML = highlightYaml(yaml, marks);
   els.output.hidden = false;
   els.empty.hidden = true;
   els.copy.disabled = false;
   els.download.disabled = false;
   els.liveDot.className = 'live on';
-  els.meta.textContent = `· ${count} titkosított kulcs`;
+  els.meta.textContent = `· ${meta}`;
   if (changed) {
     els.output.classList.remove('flash');
     void els.output.offsetWidth; // restart animation
@@ -191,20 +313,31 @@ function showEmpty() {
   els.download.disabled = true;
   els.liveDot.className = 'live idle';
   els.meta.textContent = '';
+  els.changes.hidden = true;
+}
+
+function showChanges(edit) {
+  const chips = [
+    ...Object.keys(edit.replaced).map((k) => `<span class="c-changed" title="Módosítva">~ ${escapeHtml(k)}</span>`),
+    ...Object.keys(edit.added).map((k) => `<span class="c-added" title="Új">+ ${escapeHtml(k)}</span>`),
+    ...edit.deleted.map((k) => `<span class="c-deleted" title="Törölve">− ${escapeHtml(k)}</span>`),
+  ];
+  els.changes.innerHTML = chips.length ? chips.join('') : '<span class="c-none">Még nincs változás</span>';
+  els.changes.hidden = false;
 }
 
 function formatDate(d) {
   return d.toLocaleDateString('hu-HU', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function setCertStatus(kind, html) {
-  els.certStatus.className = `cert-status ${kind}`;
-  els.certStatus.innerHTML = html;
+function setStatus(el, kind, html) {
+  el.className = `cert-status ${kind}`;
+  el.innerHTML = html;
 }
 
 async function loadCert(pem) {
   if (!pem) {
-    setCertStatus('muted', CERT_HINT);
+    setStatus(els.certStatus, 'muted', CERT_HINT);
     els.cert.classList.remove('invalid');
     return null;
   }
@@ -219,23 +352,27 @@ async function loadCert(pem) {
         ? ` · <strong>lejárt: ${formatDate(info.notAfter)}</strong>`
         : ` · érvényes eddig: ${formatDate(info.notAfter)}`;
       if (expired) {
-        setCertStatus('error', `⚠ Tanúsítvány betöltve <span class="detail">${detail}</span>`);
+        setStatus(els.certStatus, 'error', `⚠ Tanúsítvány betöltve <span class="detail">${detail}</span>`);
         els.cert.classList.remove('invalid');
         return key;
       }
     }
-    setCertStatus('ok', `✓ Tanúsítvány betöltve <span class="detail">${detail}</span>`);
+    setStatus(els.certStatus, 'ok', `✓ Tanúsítvány betöltve <span class="detail">${detail}</span>`);
     els.cert.classList.remove('invalid');
     return key;
   } catch (e) {
     keyCache = { pem: null, key: null };
-    setCertStatus('error', `✕ ${escapeHtml(e.message)}`);
+    setStatus(els.certStatus, 'error', `✕ ${escapeHtml(e.message)}`);
     els.cert.classList.add('invalid');
     return null;
   }
 }
 
 async function render() {
+  return mode === 'edit' ? renderEdit() : renderNew();
+}
+
+async function renderNew() {
   const gen = ++generation;
   const errors = [];
   const namespace = els.namespace.value.trim();
@@ -270,7 +407,67 @@ async function render() {
     );
     if (gen !== generation) return;
     const manifest = buildSealedSecret({ name, namespace, type, scope, encryptedData: Object.fromEntries(entries) });
-    showOutput(`${toYaml(manifest)}\n`, count);
+    showOutput(`${toYaml(manifest)}\n`, `${count} titkosított kulcs`);
+  } catch (e) {
+    if (gen !== generation) return;
+    els.errors.innerHTML = `<li>Titkosítási hiba: ${escapeHtml(e.message)}</li>`;
+    showEmpty();
+  }
+}
+
+async function renderEdit() {
+  const gen = ++generation;
+  const errors = [];
+  const key = await loadCert(els.cert.value.trim());
+  if (gen !== generation) return;
+
+  if (!existing) {
+    els.errors.innerHTML = '';
+    setChecklist({ existing: false, cert: key });
+    showEmpty();
+    return;
+  }
+
+  const edit = collectEdit(errors);
+  const toEncrypt = { ...edit.replaced, ...edit.added };
+  const needsKey = Object.keys(toEncrypt).length > 0;
+  els.errors.innerHTML = errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('');
+  setChecklist({ existing: true, cert: key });
+
+  if (errors.length || (needsKey && !key)) {
+    showEmpty();
+    return;
+  }
+
+  els.liveDot.className = 'live busy';
+  try {
+    const { scope, namespace, name } = existing;
+    const fresh = Object.fromEntries(
+      await Promise.all(
+        Object.entries(toEncrypt).map(async ([k, v]) => [k, await encryptCached(key, v, scope, namespace, name)]),
+      ),
+    );
+    if (gen !== generation) return;
+
+    // Original key order first, new keys appended; untouched values are copied verbatim.
+    const encryptedData = {};
+    for (const [k, v] of Object.entries(existing.encryptedData)) {
+      if (edit.deleted.includes(k)) continue;
+      encryptedData[k] = k in fresh ? fresh[k] : v;
+    }
+    for (const k of Object.keys(edit.added)) encryptedData[k] = fresh[k];
+
+    const marks = {};
+    for (const k of Object.keys(edit.replaced)) marks[k] = 'changed';
+    for (const k of Object.keys(edit.added)) marks[k] = 'added';
+
+    const changes = Object.keys(edit.replaced).length + Object.keys(edit.added).length + edit.deleted.length;
+    showOutput(
+      updatedYaml(existing.manifest, encryptedData),
+      changes ? `${changes} változás · ${edit.kept.length} változatlan kulcs` : 'nincs változás',
+      marks,
+    );
+    showChanges(edit);
   } catch (e) {
     if (gen !== generation) return;
     els.errors.innerHTML = `<li>Titkosítási hiba: ${escapeHtml(e.message)}</li>`;
@@ -282,6 +479,74 @@ let timer;
 function schedule() {
   clearTimeout(timer);
   timer = setTimeout(render, 120);
+}
+
+// ---------- modes ----------
+
+function lockTarget(locked) {
+  els.namespace.readOnly = locked;
+  els.name.readOnly = locked;
+  els.lockNote.hidden = !locked;
+  setDisabled(els.scope, locked);
+  setDisabled(els.type, locked);
+}
+
+function loadExisting(text) {
+  if (text === existingText) return;
+  existingText = text;
+  existing = null;
+  els.pairs.replaceChildren();
+  els.existing.classList.remove('invalid');
+  if (!text.trim()) {
+    setStatus(els.existingStatus, 'muted', EXISTING_HINT);
+    lockTarget(false);
+    return;
+  }
+  try {
+    existing = parseSealedSecret(text);
+  } catch (e) {
+    setStatus(els.existingStatus, 'error', `✕ ${escapeHtml(e.message)}`);
+    els.existing.classList.add('invalid');
+    lockTarget(false);
+    return;
+  }
+  const keys = Object.keys(existing.encryptedData);
+  els.namespace.value = existing.namespace;
+  els.name.value = existing.name;
+  setSegmented(els.scope, existing.scope);
+  const docker = existing.type === DOCKER_TYPE;
+  setSegmented(els.type, docker ? DOCKER_TYPE : 'Opaque');
+  applyType(docker ? DOCKER_TYPE : 'Opaque');
+  els.dockerEditHint.hidden = !docker;
+  if (!docker) for (const k of keys) addExistingPair(k);
+  lockTarget(true);
+  setStatus(
+    els.existingStatus,
+    'ok',
+    `✓ Betöltve <span class="detail">${escapeHtml(existing.name)}${
+      existing.namespace ? ` · ${escapeHtml(existing.namespace)}` : ''
+    } · ${keys.length} kulcs</span>`,
+  );
+}
+
+function setMode(value) {
+  mode = value;
+  document.body.classList.toggle('editing', mode === 'edit');
+  els.existingCard.hidden = mode !== 'edit';
+  els.pairs.replaceChildren();
+  els.dockerEditHint.hidden = true;
+  existingText = null;
+  existing = null;
+  els.changes.hidden = true;
+  if (mode === 'edit') {
+    loadExisting(els.existing.value);
+    els.emptyText.textContent = 'Illeszd be a meglévő SealedSecretet. Az eredmény itt jelenik meg:';
+  } else {
+    lockTarget(false);
+    addPair();
+    els.emptyText.textContent = 'Az eredmény itt jelenik meg, amint minden adat megvan:';
+  }
+  renderChecklist();
 }
 
 // ---------- misc UI ----------
@@ -309,22 +574,50 @@ async function copyText(text) {
   }
 }
 
+function setupDropzone(zone, onFile) {
+  for (const evt of ['dragenter', 'dragover']) {
+    zone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      zone.classList.add('dragging');
+    });
+  }
+  for (const evt of ['dragleave', 'drop']) zone.addEventListener(evt, () => zone.classList.remove('dragging'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    onFile(e.dataTransfer.files[0]);
+  });
+}
+
+function setupFileInput(input, onFile) {
+  input.addEventListener('change', async () => {
+    await onFile(input.files[0]);
+    input.value = '';
+  });
+}
+
 async function readCertFile(file) {
   if (!file) return;
   els.cert.value = (await file.text()).trim();
   schedule();
 }
 
+async function readExistingFile(file) {
+  if (!file) return;
+  els.existing.value = await file.text();
+  loadExisting(els.existing.value);
+  schedule();
+}
+
 // ---------- wiring ----------
 
-document.querySelector('main').addEventListener('input', schedule);
-
-setupSegmented(els.scope);
-setupSegmented(els.type, (value) => {
-  const docker = value === DOCKER_TYPE;
-  els.dockerFields.hidden = !docker;
-  els.opaqueFields.hidden = docker;
+document.querySelector('main').addEventListener('input', (e) => {
+  if (e.target === els.existing) loadExisting(els.existing.value);
+  schedule();
 });
+
+setupSegmented(els.mode, setMode);
+setupSegmented(els.scope);
+setupSegmented(els.type, applyType);
 
 els.addPair.addEventListener('click', () => {
   addPair().querySelector('.pair-key').focus();
@@ -336,24 +629,10 @@ els.revealPassword.addEventListener('click', () => {
   els.revealPassword.classList.toggle('on', show);
 });
 
-els.certFile.addEventListener('change', async () => {
-  await readCertFile(els.certFile.files[0]);
-  els.certFile.value = '';
-});
-
-for (const evt of ['dragenter', 'dragover']) {
-  els.dropzone.addEventListener(evt, (e) => {
-    e.preventDefault();
-    els.dropzone.classList.add('dragging');
-  });
-}
-for (const evt of ['dragleave', 'drop']) {
-  els.dropzone.addEventListener(evt, () => els.dropzone.classList.remove('dragging'));
-}
-els.dropzone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  readCertFile(e.dataTransfer.files[0]);
-});
+setupFileInput(els.certFile, readCertFile);
+setupFileInput(els.existingFile, readExistingFile);
+setupDropzone(els.dropzone, readCertFile);
+setupDropzone(els.existingDropzone, readExistingFile);
 
 els.copy.addEventListener('click', async () => {
   await copyText(currentYaml);
@@ -372,5 +651,5 @@ els.download.addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 
-addPair();
+setMode('new');
 render();

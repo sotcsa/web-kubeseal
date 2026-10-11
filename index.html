@@ -25,10 +25,34 @@
     </header>
 
     <main class="layout">
-      <section class="column">
+      <section class="column steps">
+        <div class="segmented wide mode" id="mode" role="radiogroup" aria-label="Mód">
+          <button type="button" role="radio" data-value="new" aria-checked="true">Új secret</button>
+          <button type="button" role="radio" data-value="edit" aria-checked="false">Meglévő módosítása</button>
+        </div>
+
+        <div class="card" id="existingCard" hidden>
+          <div class="card-head">
+            <span class="step"></span>
+            <h2>Meglévő SealedSecret</h2>
+          </div>
+          <div class="dropzone" id="existingDropzone">
+            <textarea id="existing" rows="5" spellcheck="false"
+              placeholder="Illeszd be a meglévő SealedSecret YAML-t, vagy húzd ide a fájlt…&#10;&#10;kubectl get sealedsecret NÉV -n NÉVTÉR -o yaml"></textarea>
+            <div class="drop-overlay">Engedd el a SealedSecret betöltéséhez</div>
+          </div>
+          <div class="cert-row">
+            <div id="existingStatus" class="cert-status muted">A kulcsok értékei titkosítva maradnak, csak a módosítottak titkosítódnak újra.</div>
+            <label class="link-btn">
+              Fájl választása
+              <input id="existingFile" type="file" accept=".yaml,.yml,.json,text/plain" hidden />
+            </label>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-head">
-            <span class="step">1</span>
+            <span class="step"></span>
             <h2>Cél</h2>
           </div>
           <div class="grid-2">
@@ -41,6 +65,10 @@
               <input id="name" type="text" placeholder="my-secret" autocomplete="off" spellcheck="false" />
             </div>
           </div>
+          <p id="lockNote" class="lock-note" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            A betöltött SealedSecretből. A meglévő értékek ehhez a névtérhez, névhez és scope-hoz vannak kötve, ezért nem módosíthatók.
+          </p>
           <div class="field">
             <span class="label">Scope</span>
             <div class="segmented" id="scope" role="radiogroup" aria-label="Scope">
@@ -53,7 +81,7 @@
 
         <div class="card">
           <div class="card-head">
-            <span class="step">2</span>
+            <span class="step"></span>
             <h2>Controller tanúsítvány</h2>
           </div>
           <div class="dropzone" id="dropzone">
@@ -74,7 +102,7 @@
 
         <div class="card">
           <div class="card-head">
-            <span class="step">3</span>
+            <span class="step"></span>
             <h2>Tartalom</h2>
           </div>
           <div class="segmented wide" id="type" role="radiogroup" aria-label="Secret típus">
@@ -91,6 +119,7 @@
           </div>
 
           <div id="dockerFields" hidden>
+            <p id="dockerEditHint" class="hint-note" hidden>A mostani hitelesítés titkosítva marad. A cseréhez add meg az újat teljesen; üresen hagyva nem változik.</p>
             <div class="field">
               <label for="dockerServer">Registry</label>
               <input id="dockerServer" type="text" placeholder="ghcr.io" autocomplete="off" spellcheck="false" />
@@ -137,6 +166,7 @@
             </div>
           </div>
           <ul id="errors" class="issues"></ul>
+          <div id="changes" class="changes" hidden></div>
           <pre id="output" class="code" hidden><code></code></pre>
           <div id="empty" class="empty">
             <div class="empty-icon">
@@ -160,9 +190,34 @@
       <div class="pair">
         <input class="pair-key" type="text" placeholder="KULCS" autocomplete="off" spellcheck="false" aria-label="Kulcs" />
         <textarea class="pair-value" rows="1" placeholder="érték" spellcheck="false" aria-label="Érték"></textarea>
-        <button type="button" class="icon-btn remove" aria-label="Pár törlése" title="Törlés">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
+        <div class="row-actions">
+          <span class="state-tag added">ÚJ</span>
+          <button type="button" class="icon-btn remove" aria-label="Pár törlése" title="Törlés">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <template id="existingPairTemplate">
+      <div class="pair existing" data-state="kept">
+        <input class="pair-key" type="text" readonly aria-label="Kulcs" />
+        <div class="value-cell">
+          <div class="locked">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            <span class="locked-text">titkosítva · változatlan</span>
+          </div>
+          <textarea class="pair-value" rows="1" placeholder="új érték" spellcheck="false" aria-label="Új érték" hidden></textarea>
+        </div>
+        <div class="row-actions">
+          <span class="state-tag"></span>
+          <button type="button" class="text-btn replace">Új érték</button>
+          <button type="button" class="text-btn cancel" hidden>Mégse</button>
+          <button type="button" class="text-btn undo" hidden>Visszavon</button>
+          <button type="button" class="icon-btn remove" aria-label="Kulcs törlése" title="Törlés">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>
+          </button>
+        </div>
       </div>
     </template>
 

@@ -141,6 +141,8 @@ code { font-family: var(--mono); font-size: 0.92em; }
 }
 .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .card-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.steps { counter-reset: step; }
+.steps .card:not([hidden]) .step::before { counter-increment: step; content: counter(step); }
 .step {
   display: grid;
   place-items: center;
@@ -258,8 +260,8 @@ textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; line-h
 .pair-value { min-height: 38px; resize: none; overflow: hidden; }
 @media (max-width: 520px) {
   .pair { grid-template-columns: minmax(0, 1fr) auto; }
-  .pair-value { grid-column: 1; }
-  .pair .remove { grid-column: 2; grid-row: 1; }
+  .pair-value, .value-cell { grid-column: 1 / -1; }
+  .pair .row-actions { grid-column: 2; grid-row: 1; }
   .pairs .pair + .pair { padding-top: 8px; border-top: 1px solid var(--border); }
 }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-4px); } }
@@ -396,6 +398,92 @@ textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; line-h
   border-color: var(--ok);
   background: var(--ok) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center / 10px no-repeat;
 }
+
+/* ---------- edit mode ---------- */
+.segmented.mode { margin-bottom: 0; padding: 4px; }
+.segmented.mode button { padding: 8px 12px; font-size: 13.5px; font-weight: 600; }
+.segmented button:disabled { cursor: not-allowed; opacity: 0.55; }
+.segmented button[aria-checked='true']:disabled { opacity: 0.85; }
+input[readonly] { color: var(--muted); cursor: not-allowed; }
+input[readonly]:hover { border-color: var(--border); }
+input[readonly]:focus { border-color: var(--border); box-shadow: none; }
+
+.lock-note, .hint-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+  background: var(--accent-soft);
+  border-radius: 10px;
+}
+.lock-note svg { margin-top: 2px; color: var(--accent); }
+
+.row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-height: 38px; }
+@media (min-width: 521px) { body.editing .row-actions { min-width: 176px; } }
+.state-tag {
+  display: none;
+  padding: 2px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 5px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+body.editing .state-tag.added,
+.pair.existing[data-state='replaced'] .state-tag,
+.pair.existing[data-state='deleted'] .state-tag { display: inline-block; }
+.state-tag.added { color: var(--ok); }
+.pair.existing[data-state='replaced'] .state-tag { color: var(--warn); }
+.pair.existing[data-state='replaced'] .state-tag::before { content: 'MÓDOSÍTVA'; }
+.pair.existing[data-state='deleted'] .state-tag { color: var(--error); }
+.pair.existing[data-state='deleted'] .state-tag::before { content: 'TÖRÖLVE'; }
+
+.value-cell { min-width: 0; }
+.locked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+}
+.locked svg { width: 14px; height: 14px; color: var(--faint); }
+.pair.existing[data-state='deleted'] .pair-key,
+.pair.existing[data-state='deleted'] .locked { text-decoration: line-through; opacity: 0.55; }
+.pair.existing[data-state='deleted'] .locked { border-color: color-mix(in srgb, var(--error) 50%, transparent); }
+
+.text-btn {
+  height: 30px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.text-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+.changes { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.changes span { padding: 2px 8px; font: 12px var(--mono); border-radius: 6px; border: 1px solid currentColor; }
+.changes .c-changed { color: var(--warn); }
+.changes .c-added { color: var(--ok); }
+.changes .c-deleted { color: var(--error); text-decoration: line-through; }
+.changes .c-none { color: var(--muted); border-style: dashed; font-family: inherit; }
+.code .line-changed, .code .line-added { display: inline-block; width: 100%; border-radius: 3px; }
+.code .line-changed { background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.code .line-added { background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.code .dim { opacity: 0.55; }
 
 /* ---------- toast ---------- */
 .toast {
