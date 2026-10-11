@@ -3,6 +3,9 @@
 Böngészőben futó `kubeseal`: gépelés közben azonnal mutatja az eredmény `SealedSecret` YAML-t.
 
 - Kötelező: **namespace**, **name** és a sealed-secrets controller **nyilvános tanúsítványa** (PEM).
+- A tanúsítvány beilleszthető, fájlból betölthető, vagy **URL-ről letölthető**. Az URL-t a böngésző megjegyzi, és
+  `?cert=<url>` paraméterrel előre kitöltött link is megosztható a csapattal. A letöltés közvetlenül a böngészőből
+  történik, ezért a szervernek engednie kell (CORS), ahogy pl. a `raw.githubusercontent.com` vagy egy publikus bucket teszi.
 - Tetszőleges számú kulcs-érték pár dinamikusan hozzáadható / törölhető (`Opaque` secret).
 - **Image pull secret** (`kubernetes.io/dockerconfigjson`) registry, felhasználónév, jelszó és opcionális e-mail alapján.
 - Scope: `strict` (alapértelmezett), `namespace-wide`, `cluster-wide`.

@@ -89,6 +89,10 @@
               placeholder="Illeszd be a PEM tanúsítványt, vagy húzd ide a fájlt…&#10;&#10;-----BEGIN CERTIFICATE-----"></textarea>
             <div class="drop-overlay">Engedd el a tanúsítvány betöltéséhez</div>
           </div>
+          <form class="url-row" id="certUrlForm">
+            <input id="certUrl" type="url" placeholder="vagy URL-ről: https://…/cert.pem" autocomplete="url" spellcheck="false" aria-label="Tanúsítvány URL" />
+            <button id="certUrlLoad" type="submit" class="secondary-btn">Letöltés</button>
+          </form>
           <div class="cert-row">
             <div id="certStatus" class="cert-status muted">
               Lekérése: <code>kubeseal --fetch-cert &gt; cert.pem</code>

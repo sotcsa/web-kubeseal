@@ -8,6 +8,7 @@ import {
   toYaml,
 } from './kubeseal.js';
 import { parseSealedSecret, updatedYaml } from './existing.js';
+import { fetchCertificate } from './cert-url.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -24,6 +25,9 @@ const els = {
   cert: $('cert'),
   certFile: $('certFile'),
   certStatus: $('certStatus'),
+  certUrl: $('certUrl'),
+  certUrlForm: $('certUrlForm'),
+  certUrlLoad: $('certUrlLoad'),
   dropzone: $('dropzone'),
   type: $('type'),
   opaqueFields: $('opaqueFields'),
@@ -601,6 +605,42 @@ async function readCertFile(file) {
   schedule();
 }
 
+const CERT_URL_KEY = 'web-kubeseal.certUrl';
+
+function remember(key, value) {
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch {}
+}
+
+function recall(key) {
+  try {
+    return localStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
+// The certificate is public, so fetching it from a URL is fine; nothing secret is sent.
+async function loadCertFromUrl() {
+  const url = els.certUrl.value.trim();
+  if (!url) return;
+  els.certUrlLoad.disabled = true;
+  els.certUrl.classList.remove('invalid');
+  setStatus(els.certStatus, 'muted', 'Letöltés…');
+  try {
+    els.cert.value = await fetchCertificate(url);
+    remember(CERT_URL_KEY, url);
+    schedule();
+  } catch (e) {
+    els.certUrl.classList.add('invalid');
+    setStatus(els.certStatus, 'error', `✕ ${escapeHtml(e.message)}`);
+  } finally {
+    els.certUrlLoad.disabled = false;
+  }
+}
+
 async function readExistingFile(file) {
   if (!file) return;
   els.existing.value = await file.text();
@@ -611,6 +651,10 @@ async function readExistingFile(file) {
 // ---------- wiring ----------
 
 document.querySelector('main').addEventListener('input', (e) => {
+  if (e.target === els.certUrl) {
+    els.certUrl.classList.remove('invalid');
+    return;
+  }
   if (e.target === els.existing) loadExisting(els.existing.value);
   schedule();
 });
@@ -627,6 +671,11 @@ els.revealPassword.addEventListener('click', () => {
   const show = els.dockerPassword.type === 'password';
   els.dockerPassword.type = show ? 'text' : 'password';
   els.revealPassword.classList.toggle('on', show);
+});
+
+els.certUrlForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  loadCertFromUrl();
 });
 
 setupFileInput(els.certFile, readCertFile);
@@ -652,4 +701,7 @@ els.download.addEventListener('click', () => {
 });
 
 setMode('new');
+// ?cert=<url> lets a team share a link that preloads their controller certificate.
+els.certUrl.value = new URLSearchParams(location.search).get('cert') || recall(CERT_URL_KEY);
+if (els.certUrl.value) loadCertFromUrl();
 render();

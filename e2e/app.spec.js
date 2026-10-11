@@ -169,3 +169,54 @@ test('copy and download', async ({ page, context, browserName }, testInfo) => {
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('#download')]);
   expect(download.suggestedFilename()).toBe('app.sealedsecret.yaml');
 });
+
+test.describe('certificate from URL', () => {
+  const CERT_URL = 'https://certs.example.test/cert.pem';
+
+  test('downloads, remembers and preloads via ?cert=', async ({ page }) => {
+    await page.route(CERT_URL, (route) =>
+      route.fulfill({ body: certPem, headers: { 'Access-Control-Allow-Origin': '*' } }),
+    );
+    await page.fill('#namespace', 'prod');
+    await page.fill('#name', 'app');
+    await page.locator('.pair-key').first().fill('K');
+    await page.locator('.pair-value').first().fill('v');
+    await page.fill('#certUrl', CERT_URL);
+    await page.press('#certUrl', 'Enter');
+    await expect(page.locator('#certStatus')).toContainText('Tanúsítvány betöltve');
+    await expect(page.locator('#cert')).toHaveValue(certPem.trim());
+    const data = encryptedData(await output(page).innerText());
+    expect(unseal(data.K, 'prod/app')).toBe('v');
+
+    // Remembered for the next visit.
+    await page.reload();
+    await expect(page.locator('#certUrl')).toHaveValue(CERT_URL);
+    await expect(page.locator('#certStatus')).toContainText('Tanúsítvány betöltve');
+
+    // A shared link wins over the remembered URL.
+    const other = 'https://other.example.test/c.pem';
+    await page.route(other, (route) =>
+      route.fulfill({ body: certPem, headers: { 'Access-Control-Allow-Origin': '*' } }),
+    );
+    await page.goto(`./?cert=${encodeURIComponent(other)}`);
+    await expect(page.locator('#certUrl')).toHaveValue(other);
+    await expect(page.locator('#certStatus')).toContainText('Tanúsítvány betöltve');
+  });
+
+  test('explains CORS and HTTP failures', async ({ page }) => {
+    // Real cross-origin request to a server that sends no CORS header (127.0.0.1 ≠ localhost).
+    await page.fill('#certUrl', 'http://127.0.0.1:4802/web-kubeseal/test/fixtures/tls.crt');
+    await page.click('#certUrlLoad');
+    await expect(page.locator('#certStatus')).toContainText('CORS');
+    await expect(page.locator('#certUrl')).toHaveClass(/invalid/);
+
+    await page.route(CERT_URL, (route) =>
+      route.fulfill({ status: 404, body: 'nope', headers: { 'Access-Control-Allow-Origin': '*' } }),
+    );
+    await page.fill('#certUrl', CERT_URL);
+    await expect(page.locator('#certUrl')).not.toHaveClass(/invalid/);
+    await page.click('#certUrlLoad');
+    await expect(page.locator('#certStatus')).toContainText('HTTP 404');
+    await expect(page.locator('#cert')).toHaveValue('');
+  });
+});
