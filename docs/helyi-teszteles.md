@@ -59,7 +59,7 @@ alapból ezt keresi. Két egyenértékű út van, elég az egyik.
 **A) Helm chart (ajánlott)**
 
 ```sh
-helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
+helm repo add sealed-secrets https://bitnami.github.io/sealed-secrets
 helm repo update
 helm install sealed-secrets sealed-secrets/sealed-secrets \
   --namespace kube-system \
@@ -68,12 +68,12 @@ helm install sealed-secrets sealed-secrets/sealed-secrets \
 
 **B) Egyetlen manifest kubectl-lel**
 
-A legfrissebb verziót a [releases oldalon](https://github.com/bitnami-labs/sealed-secrets/releases) találod.
-A web kubeseal kimenetét a 0.27.1-es kubeseal sikeresen visszafejti.
+A legfrissebb verziót a [releases oldalon](https://github.com/bitnami/sealed-secrets/releases) találod.
+A web kubeseal kimenetét a 0.40.0-s controller (Helm chart 2.20.0) mindhárom scope-pal sikeresen visszafejti.
 
 ```sh
-VERSION=0.27.1
-kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v${VERSION}/controller.yaml
+VERSION=0.40.0
+kubectl apply -f https://github.com/bitnami/sealed-secrets/releases/download/v${VERSION}/controller.yaml
 ```
 
 **Ellenőrzés**
