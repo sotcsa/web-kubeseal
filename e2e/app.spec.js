@@ -219,8 +219,11 @@ test.describe('certificate from URL', () => {
 });
 
 test('cluster picker from clusters.yaml', async ({ page }) => {
-  // The shipped config is empty, so the picker stays hidden.
+  // Without clusters the picker stays hidden.
+  await page.route('**/clusters.yaml', (route) => route.fulfill({ body: '{}\n' }));
+  await page.goto('./');
   await expect(page.locator('#cluster')).toBeHidden();
+  await page.unroute('**/clusters.yaml');
 
   const indent = certPem.trim().split('\n').map((l) => `  ${l}`).join('\n');
   await page.route('**/clusters.yaml', (route) =>

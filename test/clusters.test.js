@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseClusters, loadClusters } from '../src/clusters.js';
+import { importPublicKey } from '../src/kubeseal.js';
 
 const cert = readFileSync(new URL('./fixtures/tls.crt', import.meta.url), 'utf8').trim();
 const indent = (s) => s.split('\n').map((l) => `  ${l}`).join('\n');
@@ -14,10 +15,17 @@ describe('parseClusters', () => {
     ]);
   });
 
-  it('accepts the shipped config, empty files and comments', () => {
-    const shipped = readFileSync(new URL('../clusters.yaml', import.meta.url), 'utf8');
-    expect(parseClusters(shipped)).toEqual([]);
+  it('every certificate in the shipped clusters.yaml is a usable RSA key', async () => {
+    const shipped = parseClusters(readFileSync(new URL('../clusters.yaml', import.meta.url), 'utf8'));
+    for (const { name, pem } of shipped) {
+      const key = await importPublicKey(pem).catch((e) => expect.fail(`${name}: ${e.message}`));
+      expect(key.algorithm.name).toBe('RSA-OAEP');
+    }
+  });
+
+  it('accepts empty files and comments', () => {
     expect(parseClusters('')).toEqual([]);
+    expect(parseClusters('{}')).toEqual([]);
     expect(parseClusters('# semmi\n')).toEqual([]);
   });
 
