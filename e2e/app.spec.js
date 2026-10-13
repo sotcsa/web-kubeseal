@@ -40,6 +40,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#certStatus')).toBeVisible();
   // Styles and scripts must load (fails when assets 404 under the sub-path).
   await expect(page.locator('.pair')).toHaveCount(1);
+  await expect(page.locator('.file-warning')).toHaveCount(0);
   expect(await page.locator('.card').first().evaluate((el) => getComputedStyle(el).borderRadius)).not.toBe('0px');
   page.errors = errors;
 });

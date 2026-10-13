@@ -33,6 +33,9 @@ export async function loadClusters(fetchImpl = globalThis.fetch, doc = globalThi
   } catch (e) {
     const embedded = doc?.getElementById('clusters-config');
     if (embedded) return parseClusters(embedded.textContent);
+    if (globalThis.location?.protocol === 'file:') {
+      throw new Error('Fájlként megnyitva a cluster lista csak a buildelt dist/index.html-ben érhető el.');
+    }
     throw e;
   }
   if (res.status === 404) return [];
