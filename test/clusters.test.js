@@ -41,4 +41,11 @@ describe('loadClusters', () => {
     expect(await loadClusters(async () => new Response('', { status: 404 }))).toEqual([]);
     await expect(loadClusters(async () => new Response('', { status: 500 }))).rejects.toThrow('HTTP 500');
   });
+
+  it('falls back to the embedded config when fetch is blocked (file://)', async () => {
+    const blocked = async () => { throw new TypeError('Failed to fetch'); };
+    const doc = { getElementById: () => ({ textContent: 'x: |\n  -----BEGIN CERTIFICATE-----\n  AA\n  -----END CERTIFICATE-----\n' }) };
+    expect(await loadClusters(blocked, doc)).toHaveLength(1);
+    await expect(loadClusters(blocked, { getElementById: () => null })).rejects.toThrow('Failed to fetch');
+  });
 });

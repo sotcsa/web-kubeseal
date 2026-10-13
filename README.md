@@ -48,6 +48,21 @@ amit RSA-OAEP (SHA-256) titkosít a controller kulcsával, `namespace/name` cím
 A tesztek a `test/fixtures` alatti **csak tesztre szánt** kulcspárral ellenőrzik, hogy az eredmény visszafejthető.
 A kimenetet a valódi `kubeseal --recovery-unseal` is sikeresen visszafejti.
 
+## Helyi használat, fájlként megnyitva
+
+A build egyetlen önálló fájl: a `dist/index.html` duplakattal (`file://`) is megnyitható, nem kell hozzá
+szerver, és a `clusters.yaml` is benne van.
+
+```sh
+npm install
+npm run build
+open dist/index.html   # Linuxon: xdg-open dist/index.html
+```
+
+A repó gyökerében lévő `index.html` csak a forrás: fájlként megnyitva a böngésző nem tölti be a
+modulokat (CORS), ezt az oldal ki is írja. Ugyanez a fájl a publikált oldalról is letölthető:
+`curl -o web-kubeseal.html https://sotcsa.github.io/web-kubeseal/`.
+
 ## Fejlesztés
 
 Részletes helyi tesztelési útmutató, minikube-bal együtt: [docs/helyi-teszteles.md](docs/helyi-teszteles.md).
@@ -56,8 +71,8 @@ Részletes helyi tesztelési útmutató, minikube-bal együtt: [docs/helyi-teszt
 npm install
 npm run dev     # fejlesztői szerver
 npm test        # unit tesztek (titkosítási formátum)
-npm run test:e2e  # böngészős tesztek (Playwright, asztali + mobil nézet)
-npm run build   # statikus build a dist/ mappába
+npm run test:e2e  # böngészős tesztek (Playwright: asztali, mobil, nyers forrás, file://)
+npm run build   # önálló dist/index.html (fájlként is megnyitható)
 npm run vendor:yaml  # a src/vendor/yaml.js újragenerálása a yaml csomagból
 ```
 
