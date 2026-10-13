@@ -1,0 +1,11 @@
+# Clusterek a tanúsítvány választóhoz: név → a sealed-secrets controller tanúsítványa (PEM).
+# Lekérése: kubeseal --fetch-cert --controller-namespace kube-system > cert.pem
+#
+# Figyelem: a repó és az oldal publikus, ami ide kerül, azt bárki láthatja.
+#
+# Példa:
+# prod-cluster: |
+#   -----BEGIN CERTIFICATE-----
+#   MIIE...
+#   -----END CERTIFICATE-----
+{}

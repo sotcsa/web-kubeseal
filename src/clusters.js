@@ -1,55 +1,31 @@
-// Controller certificate URLs offered in the cluster picker.
-//
-// PRESETS ships with the app, so anything listed here is public (this repo and the
-// GitHub Pages site are public). Keep internal hostnames out of it; save them in the
-// browser instead (the "Mentés" button), or share a ?cert=<url> link.
-//
-// Format: { name: 'prod-cluster', url: 'https://sealed-secrets.example.com/v1/cert.pem' }
-export const PRESETS = [];
+// The cluster picker reads ../clusters.yaml: a map of cluster name -> controller certificate (PEM).
+import { parseAllDocuments } from './vendor/yaml.js';
 
-const STORAGE_KEY = 'web-kubeseal.clusters';
+const PEM = /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/;
 
-function storage() {
-  try {
-    return globalThis.localStorage ?? null;
-  } catch {
-    return null;
+/** Parses clusters.yaml into [{ name, pem }], keeping the file's order. */
+export function parseClusters(text) {
+  const docs = parseAllDocuments(text);
+  if (docs.length > 1) throw new Error('A clusters.yaml csak egy dokumentumot tartalmazhat.');
+  const doc = docs[0];
+  if (!doc) return [];
+  if (doc.errors.length) throw new Error(`A clusters.yaml nem érvényes YAML: ${doc.errors[0].message.split('\n')[0]}`);
+  const data = doc.toJS();
+  if (data == null) return [];
+  if (typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('A clusters.yaml név → tanúsítvány párokat várt.');
   }
+  return Object.entries(data).map(([name, value]) => {
+    const pem = typeof value === 'string' && PEM.exec(value);
+    if (!pem) throw new Error(`„${name}”: nem PEM tanúsítvány.`);
+    return { name, pem: pem[0] };
+  });
 }
 
-function valid(c) {
-  return c && typeof c.name === 'string' && c.name.trim() && typeof c.url === 'string' && /^https?:\/\//.test(c.url);
-}
-
-/** Clusters saved in this browser. */
-export function savedClusters(store = storage()) {
-  try {
-    const list = JSON.parse(store?.getItem(STORAGE_KEY) || '[]');
-    return Array.isArray(list) ? list.filter(valid) : [];
-  } catch {
-    return [];
-  }
-}
-
-function write(list, store) {
-  try {
-    store?.setItem(STORAGE_KEY, JSON.stringify(list));
-  } catch {}
-}
-
-/** Saves (or renames, by URL) a cluster in this browser; returns the new list. */
-export function saveCluster(name, url, store = storage()) {
-  const entry = { name: name.trim(), url: url.trim() };
-  if (!valid(entry)) throw new Error('Név és http(s) URL szükséges.');
-  const list = savedClusters(store).filter((c) => c.url !== entry.url && c.name !== entry.name);
-  list.push(entry);
-  list.sort((a, b) => a.name.localeCompare(b.name, 'hu'));
-  write(list, store);
-  return list;
-}
-
-export function removeCluster(url, store = storage()) {
-  const list = savedClusters(store).filter((c) => c.url !== url);
-  write(list, store);
-  return list;
+/** Downloads and parses the config next to the page; a missing file means no clusters. */
+export async function loadClusters(fetchImpl = globalThis.fetch) {
+  const res = await fetchImpl('./clusters.yaml', { cache: 'no-cache' });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`A clusters.yaml nem tölthető be: HTTP ${res.status}.`);
+  return parseClusters(await res.text());
 }

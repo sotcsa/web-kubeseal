@@ -6,9 +6,9 @@ Böngészőben futó `kubeseal`: gépelés közben azonnal mutatja az eredmény 
 - A tanúsítvány beilleszthető, fájlból betölthető, vagy **URL-ről letölthető**. Az URL-t a böngésző megjegyzi, és
   `?cert=<url>` paraméterrel előre kitöltött link is megosztható a csapattal. A letöltés közvetlenül a böngészőből
   történik, ezért a szervernek engednie kell (CORS), ahogy pl. a `raw.githubusercontent.com` vagy egy publikus bucket teszi.
-- **Cluster választó:** a sikeresen letöltött URL a „Mentés” gombbal névvel elmenthető, és utána a listából egy
-  kattintással választható. A saját lista csak az adott böngészőben tárolódik. Mindenkinek megjelenő listát a
-  `src/clusters.js` `PRESETS` tömbje ad, de mivel a repó és az oldal publikus, belső hostnevek ne kerüljenek bele.
+- **Cluster választó:** a repó gyökerében lévő [`clusters.yaml`](clusters.yaml) név → tanúsítvány párjaiból
+  töltődik, egy kattintással betölti a cluster tanúsítványát. A választás megmarad, és `?cluster=<név>` linkkel
+  megosztható. A fájl publikus, ahogy az egész repó.
 - Tetszőleges számú kulcs-érték pár dinamikusan hozzáadható / törölhető (`Opaque` secret).
 - **Image pull secret** (`kubernetes.io/dockerconfigjson`) registry, felhasználónév, jelszó és opcionális e-mail alapján.
 - Scope: mindig `strict`, a titok csak a megadott névtérben és néven fejthető vissza. Más scope-ú SealedSecret
