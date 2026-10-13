@@ -224,5 +224,15 @@
     </template>
 
     <script type="module" src="./src/main.js"></script>
+    <script>
+      // Browsers block module scripts on file://; only the built dist/index.html is self-contained.
+      if (location.protocol === 'file:' && document.querySelector('script[type="module"][src]')) {
+        document.body.insertAdjacentHTML(
+          'afterbegin',
+          '<div class="file-warning">Ez a forrás <code>index.html</code>, fájlként nem működik. ' +
+            'Futtasd: <code>npm run build</code>, és nyisd meg a <code>dist/index.html</code>-t.</div>',
+        );
+      }
+    </script>
   </body>
 </html>

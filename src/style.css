@@ -544,3 +544,12 @@ body.editing .state-tag.added,
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+.file-warning {
+  padding: 12px 16px;
+  font-size: 14px;
+  text-align: center;
+  color: var(--text);
+  background: color-mix(in srgb, var(--error) 18%, var(--surface));
+  border-bottom: 1px solid var(--error);
+}

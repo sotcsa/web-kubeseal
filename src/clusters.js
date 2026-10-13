@@ -22,9 +22,19 @@ export function parseClusters(text) {
   });
 }
 
-/** Downloads and parses the config next to the page; a missing file means no clusters. */
-export async function loadClusters(fetchImpl = globalThis.fetch) {
-  const res = await fetchImpl('./clusters.yaml', { cache: 'no-cache' });
+/**
+ * Reads the config from next to the page; a missing file means no clusters. Opened from
+ * disk (file://) fetch is blocked, so the build also embeds the config in the page.
+ */
+export async function loadClusters(fetchImpl = globalThis.fetch, doc = globalThis.document) {
+  let res;
+  try {
+    res = await fetchImpl('./clusters.yaml', { cache: 'no-cache' });
+  } catch (e) {
+    const embedded = doc?.getElementById('clusters-config');
+    if (embedded) return parseClusters(embedded.textContent);
+    throw e;
+  }
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`A clusters.yaml nem tölthető be: HTTP ${res.status}.`);
   return parseClusters(await res.text());
