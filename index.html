@@ -223,16 +223,12 @@
       </div>
     </template>
 
-    <script type="module" src="./src/main.js"></script>
-    <script>
-      // Browsers block module scripts on file://; only the built dist/index.html is self-contained.
-      if (location.protocol === 'file:' && document.querySelector('script[type="module"][src]')) {
-        document.body.insertAdjacentHTML(
-          'afterbegin',
-          '<div class="file-warning">Ez a forrás <code>index.html</code>, fájlként nem működik. ' +
-            'Futtasd: <code>npm run build</code>, és nyisd meg a <code>dist/index.html</code>-t.</div>',
-        );
-      }
-    </script>
+    <template id="fileWarning">
+      <div class="file-warning">A böngésző nem tudta betölteni az alkalmazást. Ha fájlként nyitottad meg a forrás
+        <code>index.html</code>-t, futtasd: <code>npm run build</code>, és nyisd meg a <code>dist/index.html</code>-t.</div>
+    </template>
+    <!-- Some browsers (e.g. Chrome) block module scripts on file://; warn only when loading really failed. -->
+    <script type="module" src="./src/main.js"
+      onerror="document.body.prepend(document.getElementById('fileWarning').content.cloneNode(true))"></script>
   </body>
 </html>

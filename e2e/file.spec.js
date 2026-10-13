@@ -24,7 +24,7 @@ test('the built dist/index.html works from file://', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('the source index.html explains itself when opened from file://', async ({ page }) => {
+test('the source index.html explains itself when Chromium blocks it on file://', async ({ page }) => {
   await page.goto(new URL('index.html', root).href);
   await expect(page.locator('.file-warning')).toContainText('npm run build');
 });

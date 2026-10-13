@@ -59,8 +59,9 @@ npm run build
 open dist/index.html   # Linuxon: xdg-open dist/index.html
 ```
 
-A repó gyökerében lévő `index.html` csak a forrás: fájlként megnyitva a böngésző nem tölti be a
-modulokat (CORS), ezt az oldal ki is írja. Ugyanez a fájl a publikált oldalról is letölthető:
+A repó gyökerében lévő `index.html` csak a forrás: fájlként megnyitva a Chrome nem tölti be a
+modulokat (CORS), ezt az oldal ki is írja. Más böngésző (pl. Safari) betöltheti, de a cluster lista
+fájlként csak a `dist/index.html`-ben érhető el. Ugyanez a fájl a publikált oldalról is letölthető:
 `curl -o web-kubeseal.html https://sotcsa.github.io/web-kubeseal/`.
 
 ## Fejlesztés
