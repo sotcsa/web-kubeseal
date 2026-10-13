@@ -261,7 +261,7 @@ select {
 select:hover { border-color: var(--border-strong); }
 select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
-.secondary-btn.danger:hover:not(:disabled) { color: var(--error); border-color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); }
+.cluster-error { margin: -2px 0 10px; }
 .url-row { display: flex; gap: 8px; margin-top: 10px; }
 .url-row input { flex: 1; min-width: 0; font-size: 13px; }
 .secondary-btn {

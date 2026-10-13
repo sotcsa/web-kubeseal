@@ -218,38 +218,45 @@ test.describe('certificate from URL', () => {
   });
 });
 
-test('saves clusters in the browser and picks them from the list', async ({ page }) => {
-  const urls = { a: 'https://a.example.test/v1/cert.pem', b: 'https://b.example.test/v1/cert.pem' };
-  for (const url of Object.values(urls)) {
-    await page.route(url, (route) => route.fulfill({ body: certPem, headers: { 'Access-Control-Allow-Origin': '*' } }));
-  }
+test('cluster picker from clusters.yaml', async ({ page }) => {
+  // Without clusters the picker stays hidden.
+  await page.route('**/clusters.yaml', (route) => route.fulfill({ body: '{}\n' }));
+  await page.goto('./');
   await expect(page.locator('#cluster')).toBeHidden();
+  await page.unroute('**/clusters.yaml');
 
-  for (const [name, url] of [['beta', urls.b], ['alpha', urls.a]]) {
-    await page.fill('#certUrl', url);
-    await expect(page.locator('#saveCluster')).toBeHidden(); // only after a successful download
-    await page.press('#certUrl', 'Enter');
-    await page.click('#saveCluster');
-    await page.fill('#clusterName', name);
-    await page.press('#clusterName', 'Enter');
-    await expect(page.locator('#toast')).toContainText(`„${name}” elmentve`);
-  }
-  await expect(page.locator('#cluster option')).toHaveText(['Cluster választása…', 'alpha', 'beta']);
-  await expect(page.locator('#cluster')).toHaveValue(urls.a);
-  await expect(page.locator('#saveCluster')).toBeHidden();
+  const indent = certPem.trim().split('\n').map((l) => `  ${l}`).join('\n');
+  await page.route('**/clusters.yaml', (route) =>
+    route.fulfill({ body: `# config\nalpha-cluster: |\n${indent}\nbeta-cluster: |\n${indent}\n` }),
+  );
+  await page.goto('./');
+  await expect(page.locator('#cluster option')).toHaveText(['Cluster választása…', 'alpha-cluster', 'beta-cluster']);
 
-  await page.selectOption('#cluster', { label: 'beta' });
-  await expect(page.locator('#certUrl')).toHaveValue(urls.b);
+  await page.fill('#namespace', 'prod');
+  await page.fill('#name', 'app');
+  await page.locator('.pair-key').first().fill('K');
+  await page.locator('.pair-value').first().fill('v');
+  await page.selectOption('#cluster', 'beta-cluster');
+  await expect(page.locator('#cert')).toHaveValue(certPem.trim());
   await expect(page.locator('#certStatus')).toContainText('Tanúsítvány betöltve');
+  expect(unseal(encryptedData(await output(page).innerText()).K, 'prod/app')).toBe('v');
 
+  // Remembered for the next visit; a shared ?cluster= link wins.
   await page.reload();
-  await expect(page.locator('#cluster')).toHaveValue(urls.b);
+  await expect(page.locator('#cluster')).toHaveValue('beta-cluster');
   await expect(page.locator('#certStatus')).toContainText('Tanúsítvány betöltve');
+  await page.goto('./?cluster=alpha-cluster');
+  await expect(page.locator('#cluster')).toHaveValue('alpha-cluster');
 
-  await page.click('#removeCluster');
-  await expect(page.locator('#cluster option')).toHaveText(['Cluster választása…', 'alpha']);
+  // Editing the certificate by hand deselects the cluster.
+  await page.locator('#cert').press('End');
+  await page.locator('#cert').type('x');
   await expect(page.locator('#cluster')).toHaveValue('');
-  await page.selectOption('#cluster', { label: 'alpha' });
-  await page.click('#removeCluster');
+});
+
+test('broken clusters.yaml is reported', async ({ page }) => {
+  await page.route('**/clusters.yaml', (route) => route.fulfill({ body: 'prod: nem tanúsítvány\n' }));
+  await page.goto('./');
+  await expect(page.locator('#clusterError')).toContainText('„prod”: nem PEM');
   await expect(page.locator('#cluster')).toBeHidden();
 });

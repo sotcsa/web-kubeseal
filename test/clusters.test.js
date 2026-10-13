@@ -1,37 +1,44 @@
 import { describe, it, expect } from 'vitest';
-import { PRESETS, savedClusters, saveCluster, removeCluster } from '../src/clusters.js';
+import { readFileSync } from 'node:fs';
+import { parseClusters, loadClusters } from '../src/clusters.js';
+import { importPublicKey } from '../src/kubeseal.js';
 
-function memoryStore() {
-  const data = new Map();
-  return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, String(v)) };
-}
+const cert = readFileSync(new URL('./fixtures/tls.crt', import.meta.url), 'utf8').trim();
+const indent = (s) => s.split('\n').map((l) => `  ${l}`).join('\n');
 
-describe('clusters', () => {
-  it('ships no presets with internal hostnames', () => {
-    for (const p of PRESETS) expect(p.url).toMatch(/^https:\/\//);
-  });
-
-  it('saves, sorts, replaces by URL or name, and removes', () => {
-    const s = memoryStore();
-    expect(savedClusters(s)).toEqual([]);
-    saveCluster('zeta', 'https://z.example/v1/cert.pem', s);
-    saveCluster(' alpha ', 'https://a.example/v1/cert.pem', s);
-    expect(savedClusters(s).map((c) => c.name)).toEqual(['alpha', 'zeta']);
-    saveCluster('alpha-renamed', 'https://a.example/v1/cert.pem', s);
-    saveCluster('zeta', 'https://z2.example/v1/cert.pem', s);
-    expect(savedClusters(s)).toEqual([
-      { name: 'alpha-renamed', url: 'https://a.example/v1/cert.pem' },
-      { name: 'zeta', url: 'https://z2.example/v1/cert.pem' },
+describe('parseClusters', () => {
+  it('reads name -> PEM pairs in file order', () => {
+    const yaml = `zeta: |\n${indent(cert)}\nalpha: |\n${indent(cert)}\n`;
+    expect(parseClusters(yaml)).toEqual([
+      { name: 'zeta', pem: cert },
+      { name: 'alpha', pem: cert },
     ]);
-    expect(removeCluster('https://z2.example/v1/cert.pem', s)).toHaveLength(1);
   });
 
-  it('rejects bad input and ignores corrupt storage', () => {
-    const s = memoryStore();
-    expect(() => saveCluster('', 'https://a', s)).toThrow();
-    expect(() => saveCluster('x', 'file:///a', s)).toThrow();
-    s.setItem('web-kubeseal.clusters', '{nope');
-    expect(savedClusters(s)).toEqual([]);
-    expect(savedClusters(null)).toEqual([]);
+  it('every certificate in the shipped clusters.yaml is a usable RSA key', async () => {
+    const shipped = parseClusters(readFileSync(new URL('../clusters.yaml', import.meta.url), 'utf8'));
+    for (const { name, pem } of shipped) {
+      const key = await importPublicKey(pem).catch((e) => expect.fail(`${name}: ${e.message}`));
+      expect(key.algorithm.name).toBe('RSA-OAEP');
+    }
+  });
+
+  it('accepts empty files and comments', () => {
+    expect(parseClusters('')).toEqual([]);
+    expect(parseClusters('{}')).toEqual([]);
+    expect(parseClusters('# semmi\n')).toEqual([]);
+  });
+
+  it('explains bad input', () => {
+    expect(() => parseClusters('- a\n- b')).toThrow('név → tanúsítvány');
+    expect(() => parseClusters('prod: nem cert')).toThrow('„prod”: nem PEM');
+    expect(() => parseClusters('a: [')).toThrow('nem érvényes YAML');
+  });
+});
+
+describe('loadClusters', () => {
+  it('treats a missing file as no clusters and reports other HTTP errors', async () => {
+    expect(await loadClusters(async () => new Response('', { status: 404 }))).toEqual([]);
+    await expect(loadClusters(async () => new Response('', { status: 500 }))).rejects.toThrow('HTTP 500');
   });
 });
