@@ -6,6 +6,9 @@ Böngészőben futó `kubeseal`: gépelés közben azonnal mutatja az eredmény 
 - A tanúsítvány beilleszthető, fájlból betölthető, vagy **URL-ről letölthető**. Az URL-t a böngésző megjegyzi, és
   `?cert=<url>` paraméterrel előre kitöltött link is megosztható a csapattal. A letöltés közvetlenül a böngészőből
   történik, ezért a szervernek engednie kell (CORS), ahogy pl. a `raw.githubusercontent.com` vagy egy publikus bucket teszi.
+- **Cluster választó:** a sikeresen letöltött URL a „Mentés” gombbal névvel elmenthető, és utána a listából egy
+  kattintással választható. A saját lista csak az adott böngészőben tárolódik. Mindenkinek megjelenő listát a
+  `src/clusters.js` `PRESETS` tömbje ad, de mivel a repó és az oldal publikus, belső hostnevek ne kerüljenek bele.
 - Tetszőleges számú kulcs-érték pár dinamikusan hozzáadható / törölhető (`Opaque` secret).
 - **Image pull secret** (`kubernetes.io/dockerconfigjson`) registry, felhasználónév, jelszó és opcionális e-mail alapján.
 - Scope: mindig `strict`, a titok csak a megadott névtérben és néven fejthető vissza. Más scope-ú SealedSecret
@@ -20,6 +23,21 @@ A tanúsítvány lekérése a clusterből:
 ```sh
 kubeseal --fetch-cert > cert.pem
 ```
+
+## Tanúsítvány a controllertől, böngészőből
+
+A controller `/v1/cert.pem` végpontja alapból nem küld CORS fejlécet, ezért a böngésző nem engedi az oldalnak
+kiolvasni. Ha a controller ingressen keresztül érhető el (ingress-nginx), ezekkel az annotációkkal engedélyezhető
+csak erre az oldalra és csak olvasásra:
+
+```yaml
+nginx.ingress.kubernetes.io/enable-cors: "true"
+nginx.ingress.kubernetes.io/cors-allow-origin: "https://sotcsa.github.io"
+nginx.ingress.kubernetes.io/cors-allow-methods: "GET"
+```
+
+A tanúsítvány nyilvános adat, ezt engedni nem kockázat. Belső hálózati címnél a Chrome egyszeri engedélyt kérhet
+(„helyi hálózat elérése”).
 
 ## Titkosítás
 

@@ -217,3 +217,39 @@ test.describe('certificate from URL', () => {
     await expect(page.locator('#cert')).toHaveValue('');
   });
 });
+
+test('saves clusters in the browser and picks them from the list', async ({ page }) => {
+  const urls = { a: 'https://a.example.test/v1/cert.pem', b: 'https://b.example.test/v1/cert.pem' };
+  for (const url of Object.values(urls)) {
+    await page.route(url, (route) => route.fulfill({ body: certPem, headers: { 'Access-Control-Allow-Origin': '*' } }));
+  }
+  await expect(page.locator('#cluster')).toBeHidden();
+
+  for (const [name, url] of [['beta', urls.b], ['alpha', urls.a]]) {
+    await page.fill('#certUrl', url);
+    await expect(page.locator('#saveCluster')).toBeHidden(); // only after a successful download
+    await page.press('#certUrl', 'Enter');
+    await page.click('#saveCluster');
+    await page.fill('#clusterName', name);
+    await page.press('#clusterName', 'Enter');
+    await expect(page.locator('#toast')).toContainText(`„${name}” elmentve`);
+  }
+  await expect(page.locator('#cluster option')).toHaveText(['Cluster választása…', 'alpha', 'beta']);
+  await expect(page.locator('#cluster')).toHaveValue(urls.a);
+  await expect(page.locator('#saveCluster')).toBeHidden();
+
+  await page.selectOption('#cluster', { label: 'beta' });
+  await expect(page.locator('#certUrl')).toHaveValue(urls.b);
+  await expect(page.locator('#certStatus')).toContainText('Tanúsítvány betöltve');
+
+  await page.reload();
+  await expect(page.locator('#cluster')).toHaveValue(urls.b);
+  await expect(page.locator('#certStatus')).toContainText('Tanúsítvány betöltve');
+
+  await page.click('#removeCluster');
+  await expect(page.locator('#cluster option')).toHaveText(['Cluster választása…', 'alpha']);
+  await expect(page.locator('#cluster')).toHaveValue('');
+  await page.selectOption('#cluster', { label: 'alpha' });
+  await page.click('#removeCluster');
+  await expect(page.locator('#cluster')).toBeHidden();
+});
