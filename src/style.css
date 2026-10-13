@@ -244,6 +244,24 @@ textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; line-h
 .cert-status.ok { color: var(--ok); }
 .cert-status.error { color: var(--error); }
 .cert-status .detail { color: var(--muted); }
+.cluster-row { display: flex; gap: 8px; margin-bottom: 10px; }
+select {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  cursor: pointer;
+}
+select:hover { border-color: var(--border-strong); }
+select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.secondary-btn.danger:hover:not(:disabled) { color: var(--error); border-color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); }
 .url-row { display: flex; gap: 8px; margin-top: 10px; }
 .url-row input { flex: 1; min-width: 0; font-size: 13px; }
 .secondary-btn {

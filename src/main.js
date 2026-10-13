@@ -10,6 +10,7 @@ import {
 } from './kubeseal.js';
 import { parseSealedSecret, updatedYaml } from './existing.js';
 import { fetchCertificate } from './cert-url.js';
+import { PRESETS, savedClusters, saveCluster, removeCluster } from './clusters.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -25,6 +26,12 @@ const els = {
   cert: $('cert'),
   certFile: $('certFile'),
   certStatus: $('certStatus'),
+  cluster: $('cluster'),
+  saveCluster: $('saveCluster'),
+  removeCluster: $('removeCluster'),
+  saveClusterForm: $('saveClusterForm'),
+  clusterName: $('clusterName'),
+  cancelSaveCluster: $('cancelSaveCluster'),
   certUrl: $('certUrl'),
   certUrlForm: $('certUrlForm'),
   certUrlLoad: $('certUrlLoad'),
@@ -624,6 +631,51 @@ function recall(key) {
   }
 }
 
+// ---------- cluster picker ----------
+
+let loadedUrl = '';
+
+function clusterOption(c) {
+  const o = document.createElement('option');
+  o.value = c.url;
+  o.textContent = c.name;
+  return o;
+}
+
+function renderClusters() {
+  const saved = savedClusters();
+  const groups = [
+    ['Előre definiált', PRESETS],
+    ['Saját (ebben a böngészőben)', saved],
+  ].filter(([, list]) => list.length);
+  const first = els.cluster.options[0];
+  els.cluster.replaceChildren(first);
+  for (const [label, list] of groups) {
+    const g = document.createElement('optgroup');
+    g.label = label;
+    g.append(...list.map(clusterOption));
+    els.cluster.append(g);
+  }
+  syncCluster();
+}
+
+// Selects the cluster matching the URL field and shows the fitting save/remove action.
+function syncCluster() {
+  const url = els.certUrl.value.trim();
+  const known = [...els.cluster.options].some((o) => o.value && o.value === url);
+  els.cluster.value = known ? url : '';
+  const isSaved = savedClusters().some((c) => c.url === url);
+  els.removeCluster.hidden = !isSaved;
+  els.saveCluster.hidden = known || !url || url !== loadedUrl || !els.saveClusterForm.hidden;
+  els.cluster.hidden = els.cluster.options.length < 2;
+  els.cluster.parentElement.hidden = els.cluster.hidden;
+}
+
+function closeSaveForm() {
+  els.saveClusterForm.hidden = true;
+  syncCluster();
+}
+
 // The certificate is public, so fetching it from a URL is fine; nothing secret is sent.
 async function loadCertFromUrl() {
   const url = els.certUrl.value.trim();
@@ -634,12 +686,14 @@ async function loadCertFromUrl() {
   try {
     els.cert.value = await fetchCertificate(url);
     remember(CERT_URL_KEY, url);
+    loadedUrl = url;
     schedule();
   } catch (e) {
     els.certUrl.classList.add('invalid');
     setStatus(els.certStatus, 'error', `✕ ${escapeHtml(e.message)}`);
   } finally {
     els.certUrlLoad.disabled = false;
+    syncCluster();
   }
 }
 
@@ -655,8 +709,10 @@ async function readExistingFile(file) {
 document.querySelector('main').addEventListener('input', (e) => {
   if (e.target === els.certUrl) {
     els.certUrl.classList.remove('invalid');
+    closeSaveForm();
     return;
   }
+  if (e.target === els.clusterName) return;
   if (e.target === els.existing) loadExisting(els.existing.value);
   schedule();
 });
@@ -677,6 +733,40 @@ els.revealPassword.addEventListener('click', () => {
 els.certUrlForm.addEventListener('submit', (e) => {
   e.preventDefault();
   loadCertFromUrl();
+});
+
+els.cluster.addEventListener('change', () => {
+  els.saveClusterForm.hidden = true;
+  if (!els.cluster.value) return syncCluster();
+  els.certUrl.value = els.cluster.value;
+  loadCertFromUrl();
+});
+
+els.saveCluster.addEventListener('click', () => {
+  els.saveClusterForm.hidden = false;
+  els.saveCluster.hidden = true;
+  els.clusterName.value = '';
+  els.clusterName.focus();
+});
+
+els.cancelSaveCluster.addEventListener('click', closeSaveForm);
+
+els.saveClusterForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = els.clusterName.value.trim();
+  if (!name) return els.clusterName.focus();
+  saveCluster(name, els.certUrl.value);
+  els.saveClusterForm.hidden = true;
+  renderClusters();
+  toast(`„${name}” elmentve`);
+});
+
+els.removeCluster.addEventListener('click', () => {
+  const url = els.certUrl.value.trim();
+  const entry = savedClusters().find((c) => c.url === url);
+  removeCluster(url);
+  renderClusters();
+  if (entry) toast(`„${entry.name}” eltávolítva`);
 });
 
 setupFileInput(els.certFile, readCertFile);
@@ -704,5 +794,6 @@ els.download.addEventListener('click', () => {
 setMode('new');
 // ?cert=<url> lets a team share a link that preloads their controller certificate.
 els.certUrl.value = new URLSearchParams(location.search).get('cert') || recall(CERT_URL_KEY);
+renderClusters();
 if (els.certUrl.value) loadCertFromUrl();
 render();

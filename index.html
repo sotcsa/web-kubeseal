@@ -76,6 +76,12 @@
             <span class="step"></span>
             <h2>Controller tanúsítvány</h2>
           </div>
+          <div class="cluster-row" hidden>
+            <select id="cluster" aria-label="Cluster">
+              <option value="">Cluster választása…</option>
+            </select>
+            <button id="removeCluster" type="button" class="secondary-btn danger" hidden>Eltávolítás</button>
+          </div>
           <div class="dropzone" id="dropzone">
             <textarea id="cert" rows="5" spellcheck="false"
               placeholder="Illeszd be a PEM tanúsítványt, vagy húzd ide a fájlt…&#10;&#10;-----BEGIN CERTIFICATE-----"></textarea>
@@ -84,6 +90,12 @@
           <form class="url-row" id="certUrlForm">
             <input id="certUrl" type="url" placeholder="vagy URL-ről: https://…/cert.pem" autocomplete="url" spellcheck="false" aria-label="Tanúsítvány URL" />
             <button id="certUrlLoad" type="submit" class="secondary-btn">Letöltés</button>
+            <button id="saveCluster" type="button" class="secondary-btn" hidden title="Mentés a cluster listába">Mentés</button>
+          </form>
+          <form id="saveClusterForm" class="url-row" hidden>
+            <input id="clusterName" type="text" placeholder="Cluster neve, pl. prod-cluster" autocomplete="off" spellcheck="false" aria-label="Cluster neve" />
+            <button type="submit" class="secondary-btn">Mentés</button>
+            <button id="cancelSaveCluster" type="button" class="text-btn">Mégse</button>
           </form>
           <div class="cert-row">
             <div id="certStatus" class="cert-status muted">
