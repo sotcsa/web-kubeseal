@@ -715,7 +715,9 @@ function selectRegistry(name) {
   els.dockerRegistry.value = name;
   els.dockerServer.value = registry.host;
   remember(REGISTRY_KEY, name);
-  schedule();
+  // Only the image pull secret uses the host; re-rendering otherwise would clear a pending
+  // certificate status (e.g. a URL load error) for nothing.
+  if (segmentedValue(els.type) === DOCKER_TYPE) schedule();
 }
 
 // Typing a different host switches the picker to "custom".
