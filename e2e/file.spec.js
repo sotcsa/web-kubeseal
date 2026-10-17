@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const root = new URL('../', import.meta.url);
 const certPem = readFileSync(new URL('test/fixtures/tls.crt', root), 'utf8');
-const shipped = readFileSync(new URL('clusters.yaml', root), 'utf8').match(/^[^\s#][^:]*(?=:)/gm) ?? [];
+const names = (file) => readFileSync(new URL(file, root), 'utf8').match(/^[^\s#][^:]*(?=:)/gm) ?? [];
 
 test('the built dist/index.html works from file://', async ({ page }) => {
   const errors = [];
@@ -12,8 +12,9 @@ test('the built dist/index.html works from file://', async ({ page }) => {
   await page.goto(new URL('dist/index.html', root).href);
   await expect(page.locator('.pair')).toHaveCount(1);
   await expect(page.locator('.file-warning')).toHaveCount(0);
-  // clusters.yaml is embedded in the page.
-  await expect(page.locator('#cluster option')).toHaveCount(shipped.length + 1);
+  // clusters.yaml and registries.yaml are embedded in the page.
+  await expect(page.locator('#cluster option')).toHaveCount(names('clusters.yaml').length + 1);
+  await expect(page.locator('#dockerRegistry option')).toHaveCount(names('registries.yaml').length + 1);
 
   await page.fill('#namespace', 'prod');
   await page.fill('#name', 'app');

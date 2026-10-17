@@ -11,6 +11,8 @@ Böngészőben futó `kubeseal`: gépelés közben azonnal mutatja az eredmény 
   megosztható. A fájl publikus, ahogy az egész repó.
 - Tetszőleges számú kulcs-érték pár dinamikusan hozzáadható / törölhető (`Opaque` secret).
 - **Image pull secret** (`kubernetes.io/dockerconfigjson`) registry, felhasználónév, jelszó és opcionális e-mail alapján.
+  A registry legördülőből választható a [`registries.yaml`](registries.yaml) név → host párjaiból, vagy egyéni
+  host is megadható. A választás megmarad.
 - Scope: mindig `strict`, a titok csak a megadott névtérben és néven fejthető vissza. Más scope-ú SealedSecret
   nem módosítható.
 - **Meglévő SealedSecret módosítása:** a beillesztett YAML-ban egyes kulcsok értéke cserélhető, kulcs törölhető
@@ -51,7 +53,7 @@ A kimenetet a valódi `kubeseal --recovery-unseal` is sikeresen visszafejti.
 ## Helyi használat, fájlként megnyitva
 
 A build egyetlen önálló fájl: a `dist/index.html` duplakattal (`file://`) is megnyitható, nem kell hozzá
-szerver, és a `clusters.yaml` is benne van.
+szerver, és a `clusters.yaml` meg a `registries.yaml` is benne van.
 
 ```sh
 npm install

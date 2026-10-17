@@ -1,0 +1,7 @@
+# Registryk az image pull secret választóhoz: név → registry host.
+# A választó mellett egyéni host is megadható.
+#
+# Figyelem: a repó és az oldal publikus, ami ide kerül, azt bárki láthatja.
+
+Publikus OCI: fra.ocir.io
+# DRCC: <a DRCC registry hostja>
