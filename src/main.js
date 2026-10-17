@@ -11,6 +11,7 @@ import {
 import { parseSealedSecret, updatedYaml } from './existing.js';
 import { fetchCertificate } from './cert-url.js';
 import { loadClusters } from './clusters.js';
+import { loadRegistries } from './registries.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -38,10 +39,11 @@ const els = {
   dockerEditHint: $('dockerEditHint'),
   pairs: $('pairs'),
   addPair: $('addPair'),
+  dockerRegistry: $('dockerRegistry'),
+  registryError: $('registryError'),
   dockerServer: $('dockerServer'),
   dockerUsername: $('dockerUsername'),
   dockerPassword: $('dockerPassword'),
-  dockerEmail: $('dockerEmail'),
   revealPassword: $('revealPassword'),
   output: $('output'),
   empty: $('empty'),
@@ -198,7 +200,7 @@ function dockerInput() {
   const username = els.dockerUsername.value;
   const password = els.dockerPassword.value;
   if (!server || !username || !password) return null;
-  return dockerConfigJson({ server, username, password, email: els.dockerEmail.value.trim() });
+  return dockerConfigJson({ server, username, password });
 }
 
 // New mode: plaintext values to encrypt, keyed by secret key.
@@ -687,6 +689,43 @@ async function loadCertFromUrl() {
   }
 }
 
+// ---------- registry picker ----------
+
+const REGISTRY_KEY = 'web-kubeseal.registry';
+let registries = [];
+
+async function initRegistries() {
+  try {
+    registries = await loadRegistries();
+  } catch (e) {
+    els.registryError.textContent = `✕ ${e.message}`;
+    els.registryError.hidden = false;
+  }
+  els.dockerRegistry.append(
+    ...registries.map((r) => Object.assign(document.createElement('option'), { value: r.name, textContent: `${r.name} (${r.host})` })),
+  );
+  els.dockerRegistry.hidden = registries.length === 0;
+  // Preselect the last choice, else the first registry; a host typed by hand is kept.
+  if (!els.dockerServer.value) selectRegistry(recall(REGISTRY_KEY) || registries[0]?.name);
+}
+
+function selectRegistry(name) {
+  const registry = registries.find((r) => r.name === name);
+  if (!registry) return;
+  els.dockerRegistry.value = name;
+  els.dockerServer.value = registry.host;
+  remember(REGISTRY_KEY, name);
+  // Only the image pull secret uses the host; re-rendering otherwise would clear a pending
+  // certificate status (e.g. a URL load error) for nothing.
+  if (segmentedValue(els.type) === DOCKER_TYPE) schedule();
+}
+
+// Typing a different host switches the picker to "custom".
+function syncRegistry() {
+  const selected = registries.find((r) => r.name === els.dockerRegistry.value);
+  if (selected && selected.host !== els.dockerServer.value.trim()) els.dockerRegistry.value = '';
+}
+
 async function readExistingFile(file) {
   if (!file) return;
   els.existing.value = await file.text();
@@ -702,6 +741,7 @@ document.querySelector('main').addEventListener('input', (e) => {
     return;
   }
   if (e.target === els.cert) syncCluster();
+  if (e.target === els.dockerServer) syncRegistry();
   if (e.target === els.existing) loadExisting(els.existing.value);
   schedule();
 });
@@ -727,6 +767,16 @@ els.certUrlForm.addEventListener('submit', (e) => {
 els.cluster.addEventListener('change', () => {
   if (els.cluster.value) selectCluster(els.cluster.value);
   else remember(CLUSTER_KEY, '');
+});
+
+els.dockerRegistry.addEventListener('change', () => {
+  if (els.dockerRegistry.value) selectRegistry(els.dockerRegistry.value);
+  else {
+    remember(REGISTRY_KEY, '');
+    els.dockerServer.value = '';
+    els.dockerServer.focus();
+    schedule();
+  }
 });
 
 setupFileInput(els.certFile, readCertFile);
@@ -760,3 +810,4 @@ initClusters().then(() => {
   els.certUrl.value = params.get('cert') || recall(CERT_URL_KEY);
   if (els.certUrl.value) loadCertFromUrl();
 });
+initRegistries();

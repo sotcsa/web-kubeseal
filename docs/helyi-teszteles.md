@@ -143,7 +143,7 @@ A controller felülírja a Secretet.
 Ehhez kell egy privát registry és egy olvasási jogú token, például GHCR-hez egy `read:packages` jogú GitHub token.
 
 1. A webes felületen: Namespace `demo`, Name `regcred`, típus **Image pull secret**.
-2. Registry: például `ghcr.io`, majd a felhasználónév és a token. Az e-mail opcionális.
+2. Registry: például `ghcr.io`, majd a felhasználónév és a token.
 3. Töltsd le és alkalmazd:
 
 ```sh

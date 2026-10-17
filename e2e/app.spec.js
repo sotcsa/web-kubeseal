@@ -94,12 +94,11 @@ test('image pull secret', async ({ page }) => {
   await page.fill('#dockerServer', 'ghcr.io');
   await page.fill('#dockerUsername', 'csaba');
   await page.fill('#dockerPassword', 's3cret');
-  await page.fill('#dockerEmail', 'a@b.hu');
 
   await expect(output(page)).toContainText('type: kubernetes.io/dockerconfigjson');
   const data = encryptedData(await output(page).innerText());
   expect(JSON.parse(unseal(data['.dockerconfigjson'], 'default/regcred'))).toEqual({
-    auths: { 'ghcr.io': { username: 'csaba', password: 's3cret', email: 'a@b.hu', auth: btoa('csaba:s3cret') } },
+    auths: { 'ghcr.io': { username: 'csaba', password: 's3cret', auth: btoa('csaba:s3cret') } },
   });
 
   await page.click('#revealPassword');
@@ -260,4 +259,57 @@ test('broken clusters.yaml is reported', async ({ page }) => {
   await page.goto('./');
   await expect(page.locator('#clusterError')).toContainText('„prod”: nem PEM');
   await expect(page.locator('#cluster')).toBeHidden();
+});
+
+test('registry picker from registries.yaml', async ({ page }) => {
+  await page.route('**/registries.yaml', (route) =>
+    route.fulfill({ body: '# config\nPublikus OCI: fra.ocir.io\nDRCC: registry.drcc.test\n' }),
+  );
+  await page.goto('./');
+  await fillTarget(page, 'default', 'regcred');
+  await page.getByRole('radio', { name: 'Image pull secret' }).click();
+  await expect(page.locator('#dockerRegistry option')).toHaveText([
+    'Egyéni registry',
+    'Publikus OCI (fra.ocir.io)',
+    'DRCC (registry.drcc.test)',
+  ]);
+  // The first registry is preselected.
+  await expect(page.locator('#dockerRegistry')).toHaveValue('Publikus OCI');
+  await expect(page.locator('#dockerServer')).toHaveValue('fra.ocir.io');
+
+  await page.selectOption('#dockerRegistry', 'DRCC');
+  await page.fill('#dockerUsername', 'u');
+  await page.fill('#dockerPassword', 'p');
+  const auths = async () =>
+    Object.keys(JSON.parse(unseal(encryptedData(await output(page).innerText())['.dockerconfigjson'], 'default/regcred')).auths);
+  await expect(output(page)).toContainText('.dockerconfigjson');
+  expect(await auths()).toEqual(['registry.drcc.test']);
+
+  // Remembered for the next visit.
+  await page.reload();
+  await page.getByRole('radio', { name: 'Image pull secret' }).click();
+  await expect(page.locator('#dockerRegistry')).toHaveValue('DRCC');
+
+  // A custom host: typing switches to "custom", and picking custom clears the field.
+  await page.locator('#dockerServer').fill('ghcr.io');
+  await expect(page.locator('#dockerRegistry')).toHaveValue('');
+  await page.selectOption('#dockerRegistry', 'DRCC');
+  await page.selectOption('#dockerRegistry', '');
+  await expect(page.locator('#dockerServer')).toHaveValue('');
+  await expect(page.locator('#dockerServer')).toBeFocused();
+});
+
+test('registry picker hidden without registries, broken config reported', async ({ page }) => {
+  await page.route('**/registries.yaml', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.goto('./');
+  await page.getByRole('radio', { name: 'Image pull secret' }).click();
+  await expect(page.locator('#dockerRegistry')).toBeHidden();
+  await expect(page.locator('#dockerServer')).toHaveValue('');
+
+  await page.unroute('**/registries.yaml');
+  await page.route('**/registries.yaml', (route) => route.fulfill({ body: 'DRCC:\n' }));
+  await page.goto('./');
+  await page.getByRole('radio', { name: 'Image pull secret' }).click();
+  await expect(page.locator('#registryError')).toContainText('„DRCC”: nem registry host');
+  await expect(page.locator('#dockerRegistry')).toBeHidden();
 });
