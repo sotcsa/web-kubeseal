@@ -44,7 +44,6 @@ const els = {
   dockerServer: $('dockerServer'),
   dockerUsername: $('dockerUsername'),
   dockerPassword: $('dockerPassword'),
-  dockerEmail: $('dockerEmail'),
   revealPassword: $('revealPassword'),
   output: $('output'),
   empty: $('empty'),
@@ -201,7 +200,7 @@ function dockerInput() {
   const username = els.dockerUsername.value;
   const password = els.dockerPassword.value;
   if (!server || !username || !password) return null;
-  return dockerConfigJson({ server, username, password, email: els.dockerEmail.value.trim() });
+  return dockerConfigJson({ server, username, password });
 }
 
 // New mode: plaintext values to encrypt, keyed by secret key.

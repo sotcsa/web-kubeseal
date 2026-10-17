@@ -10,7 +10,7 @@ Böngészőben futó `kubeseal`: gépelés közben azonnal mutatja az eredmény 
   töltődik, egy kattintással betölti a cluster tanúsítványát. A választás megmarad, és `?cluster=<név>` linkkel
   megosztható. A fájl publikus, ahogy az egész repó.
 - Tetszőleges számú kulcs-érték pár dinamikusan hozzáadható / törölhető (`Opaque` secret).
-- **Image pull secret** (`kubernetes.io/dockerconfigjson`) registry, felhasználónév, jelszó és opcionális e-mail alapján.
+- **Image pull secret** (`kubernetes.io/dockerconfigjson`) registry, felhasználónév és jelszó alapján.
   A registry legördülőből választható a [`registries.yaml`](registries.yaml) név → host párjaiból, vagy egyéni
   host is megadható. A választás megmarad.
 - Scope: mindig `strict`, a titok csak a megadott névtérben és néven fejthető vissza. Más scope-ú SealedSecret

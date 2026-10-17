@@ -94,12 +94,11 @@ test('image pull secret', async ({ page }) => {
   await page.fill('#dockerServer', 'ghcr.io');
   await page.fill('#dockerUsername', 'csaba');
   await page.fill('#dockerPassword', 's3cret');
-  await page.fill('#dockerEmail', 'a@b.hu');
 
   await expect(output(page)).toContainText('type: kubernetes.io/dockerconfigjson');
   const data = encryptedData(await output(page).innerText());
   expect(JSON.parse(unseal(data['.dockerconfigjson'], 'default/regcred'))).toEqual({
-    auths: { 'ghcr.io': { username: 'csaba', password: 's3cret', email: 'a@b.hu', auth: btoa('csaba:s3cret') } },
+    auths: { 'ghcr.io': { username: 'csaba', password: 's3cret', auth: btoa('csaba:s3cret') } },
   });
 
   await page.click('#revealPassword');
