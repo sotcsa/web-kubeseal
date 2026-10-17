@@ -171,8 +171,11 @@ test('image pull secret: new credentials replace .dockerconfigjson', async ({ pa
   await page.fill('#dockerUsername', 'csaba');
   await page.fill('#dockerPassword', 'new-token');
   await expect(page.locator('#changes')).toContainText('~ .dockerconfigjson');
-  const json = JSON.parse(unseal(encryptedData(await output(page).innerText())['.dockerconfigjson'], 'prod/regcred'));
-  expect(json.auths['ghcr.io'].password).toBe('new-token');
+  // The username alone already changes the secret, so a render can land between the two
+  // fills: wait for the one that carries the new password.
+  const password = async () =>
+    JSON.parse(unseal(encryptedData(await output(page).innerText())['.dockerconfigjson'], 'prod/regcred')).auths['ghcr.io'].password;
+  await expect.poll(password).toBe('new-token');
 });
 
 test('errors: invalid YAML, duplicate key, missing certificate', async ({ page }) => {
