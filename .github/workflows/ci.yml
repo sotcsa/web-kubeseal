@@ -4,14 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
+    # "closed" only exists to cancel a run still going for the PR's last push
+    # once it is merged or closed; the jobs below skip on it.
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
+# One group per PR (or per branch for pushes). A newer run cancels the older
+# one, except on main, where a deploy must never be cut off mid-way.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
