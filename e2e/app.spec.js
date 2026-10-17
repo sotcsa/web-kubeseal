@@ -265,6 +265,8 @@ test('registry picker from registries.yaml', async ({ page }) => {
   await page.route('**/registries.yaml', (route) =>
     route.fulfill({ body: '# config\nPublikus OCI: fra.ocir.io\nDRCC: registry.drcc.test\n' }),
   );
+  // A remembered registry that is no longer in registries.yaml falls back to the first one.
+  await page.evaluate(() => localStorage.setItem('web-kubeseal.registry', 'Átnevezett'));
   await page.goto('./');
   await fillTarget(page, 'default', 'regcred');
   await page.getByRole('radio', { name: 'Image pull secret' }).click();
