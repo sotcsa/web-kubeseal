@@ -705,8 +705,10 @@ async function initRegistries() {
     ...registries.map((r) => Object.assign(document.createElement('option'), { value: r.name, textContent: `${r.name} (${r.host})` })),
   );
   els.dockerRegistry.hidden = registries.length === 0;
-  // Preselect the last choice, else the first registry; a host typed by hand is kept.
-  if (!els.dockerServer.value) selectRegistry(recall(REGISTRY_KEY) || registries[0]?.name);
+  // Preselect the last choice, else the first registry (also when the remembered one was
+  // renamed or removed from registries.yaml); a host typed by hand is kept.
+  const last = recall(REGISTRY_KEY);
+  if (!els.dockerServer.value) selectRegistry(registries.some((r) => r.name === last) ? last : registries[0]?.name);
 }
 
 function selectRegistry(name) {
